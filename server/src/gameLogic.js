@@ -108,6 +108,7 @@ function takeSnapshot(state) {
     hand: [...state.hands[state.cur]],
     deck: [...state.deck],
     lastChip: state.lastChip,
+    pendingLastChip: state.pendingLastChip,
   }
 }
 
@@ -128,6 +129,7 @@ export function buildInitialState(name0, name1) {
     names: [name0, name1],
     snapshot: null,
     lastChip: null,
+    pendingLastChip: null,
   }
 }
 
@@ -189,7 +191,7 @@ function actionPlaceChip(state, playerIndex, r, c) {
     state.board[r][c] = null
   } else {
     state.board[r][c] = `p${playerIndex}`
-    state.lastChip = { r, c }
+    state.pendingLastChip = { r, c }
     checkSequences(state)
     if (state.seqs[playerIndex] >= 2) {
       state.over = true
@@ -235,6 +237,7 @@ function actionUndo(state) {
   state.hands[state.cur] = snap.hand
   state.deck = snap.deck
   state.lastChip = snap.lastChip
+  state.pendingLastChip = snap.pendingLastChip
   state.snapshot = null
   state.actionTaken = false
   state.selCard = null
@@ -246,6 +249,8 @@ function actionUndo(state) {
 
 function actionEndTurn(state) {
   if (!state.actionTaken) return { ok: false, error: 'Must take an action before ending turn' }
+  state.lastChip = state.pendingLastChip
+  state.pendingLastChip = null
   state.selCard = null
   state.mode = 'idle'
   state.actionTaken = false
