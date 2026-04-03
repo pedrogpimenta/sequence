@@ -1,0 +1,16 @@
+:80 {
+    # WebSocket upgrade for the game server
+    handle /ws {
+        reverse_proxy server:8080
+    }
+
+    # API health check
+    handle /health {
+        reverse_proxy server:8080
+    }
+
+    # Vue frontend (everything else)
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sequence</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: #1a5c2e;
+  color: white;
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+}
+
+/* ── Board (left) ───────────────────────────────────────────────────── */
+#board-wrapper {
+  height: 100vh;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
+  padding: 4px;
+  background: #111;
+  border-right: 3px solid #333;
+}
+
+#board {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 2px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cell {
+  background: #f5f0e8;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color 0.1s, background 0.1s;
+  user-select: none;
+  overflow: hidden;
+}
+.cell:hover:not(.no-hover) { border-color: #ffd700; }
+.cell.no-hover { cursor: default; }
+.cell.free-cell  { background: #c8e6c9; cursor: default; }
+.cell.highlight  { border-color: #f0e000 !important; background: #c8f000; box-shadow: inset 0 0 6px rgba(180,210,0,0.6); }
+.cell.remove-target { border-color: #ff3300 !important; background: #ffaa88; box-shadow: inset 0 0 6px rgba(220,80,0,0.5); }
+
+.card-rank {
+  font-size: 2.2vh;
+  font-weight: bold;
+  line-height: 1;
+  color: #111;
+}
+.card-suit {
+  font-size: 1.8vh;
+  line-height: 1;
+}
+.red-suit   { color: #cc0000; }
+.black-suit { color: #111; }
+.free-label {
+  font-size: 1.5vh;
+  font-weight: bold;
+  color: #2e7d32;
+  letter-spacing: -0.5px;
+}
+
+.chip {
+  position: absolute;
+  width: 74%;
+  height: 74%;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+.chip.p1 { background: radial-gradient(circle at 35% 35%, #7eb3ff, #1144bb); }
+.chip.p2 { background: radial-gradient(circle at 35% 35%, #ff9999, #bb1111); }
+.chip.seq { border: 2.5px solid gold; box-shadow: 0 0 5px gold; }
+
+/* ── Sidebar (right) ────────────────────────────────────────────────── */
+#sidebar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  gap: 14px;
+  height: 100vh;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+h1 {
+  font-size: 1.9em;
+  letter-spacing: 3px;
+  text-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+  text-align: center;
+}
+
+#scores {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.seq-badge {
+  padding: 5px 18px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.95em;
+}
+.seq-badge.p1 { background: #1155cc; }
+.seq-badge.p2 { background: #cc1111; }
+
+#deck-info {
+  text-align: center;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+#message {
+  background: rgba(255,255,255,0.13);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.92em;
+  line-height: 1.4;
+  min-height: 44px;
+}
+
+/* ── Hand ───────────────────────────────────────────────────────────── */
+#hand-label {
+  font-size: 1em;
+  opacity: 0.8;
+  text-align: center;
+}
+
+#hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.hand-card {
+  width: 62px;
+  height: 88px;
+  background: white;
+  border-radius: 7px;
+  border: 2px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  transition: transform 0.1s, border-color 0.1s, opacity 0.1s;
+  user-select: none;
+}
+.hand-card:hover:not(.action-done) { transform: translateY(-6px); border-color: #888; }
+.hand-card.selected { border-color: #ffd700; border-width: 3px; transform: translateY(-10px); }
+.hand-card.dead { opacity: 0.45; }
+.hand-card.action-done { cursor: default; opacity: 0.4; }
+.hand-card .c-rank { font-size: 1.35em; line-height: 1.2; }
+.hand-card .c-suit  { font-size: 1.15em; }
+.hand-card.red-card   { color: #cc0000; }
+.hand-card.black-card { color: #111; }
+.hand-card.jack-wild   { background: #fffde0; }
+.hand-card.jack-remove { background: #ffeee8; }
+.jack-label {
+  font-size: 0.46em;
+  text-align: center;
+  line-height: 1.2;
+  color: #555;
+  margin-top: 2px;
+  white-space: pre;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+#buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: auto;
+  padding-top: 4px;
+}
+button {
+  padding: 11px 26px;
+  border: none;
+  border-radius: 7px;
+  font-size: 1em;
+  cursor: pointer;
+  font-weight: bold;
+  transition: opacity 0.1s, transform 0.1s;
+}
+button:hover  { opacity: 0.9; transform: scale(1.03); }
+button:active { transform: scale(0.97); }
+button:disabled { opacity: 0.35; cursor: default; transform: none; }
+#end-turn-btn { background: #e74c3c; color: white; }
+#discard-btn  { background: #e67e22; color: white; }
+#cancel-btn   { background: #7f8c8d; color: white; }
+#undo-btn     { background: #8e44ad; color: white; }
+#new-game-btn  { background: #27ae60; color: white; width: 100%; }
+#new-game-area {
+  border-top: 1px solid rgba(255,255,255,0.15);
+  padding-top: 12px;
+}
+
+/* ── Overlays ───────────────────────────────────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;        /* fully opaque */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  gap: 22px;
+}
+.overlay h2 { font-size: 2.2em; }
+.overlay p  { font-size: 1.1em; opacity: 0.8; text-align: center; max-width: 340px; }
+
+.big-btn {
+  padding: 15px 44px;
+  font-size: 1.25em;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.15s;
+}
+.big-btn:hover { background: #229954; }
+.big-btn.danger { background: #e74c3c; }
+.big-btn.danger:hover { background: #c0392b; }
+
+#turn-overlay     { display: none; }
+#gameover-overlay { display: none; }
+#setup-overlay    { display: none; }
+#confirm-overlay  { display: none; background: rgba(0,0,0,0.75); }
+
+.confirm-box {
+  background: #1e3a2a;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  padding: 32px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 360px;
+  width: 90%;
+}
+.confirm-box h3 { font-size: 1.4em; }
+.confirm-box p  { font-size: 0.95em; opacity: 0.75; text-align: center; }
+.confirm-btns   { display: flex; gap: 12px; }
+.confirm-btns button { padding: 10px 28px; font-size: 1em; }
+
+/* setup form */
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  max-width: 340px;
+}
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.setup-field label {
+  font-size: 0.95em;
+  opacity: 0.8;
+  letter-spacing: 0.5px;
+}
+.player-dot {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.player-dot.p1 { background: radial-gradient(circle at 35% 35%, #7eb3ff, #1144bb); }
+.player-dot.p2 { background: radial-gradient(circle at 35% 35%, #ff9999, #bb1111); }
+.setup-field input {
+  padding: 10px 14px;
+  border-radius: 7px;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 1.05em;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.setup-field input::placeholder { opacity: 0.4; }
+.setup-field input:focus { border-color: rgba(255,255,255,0.6); }
+.setup-warning {
+  font-size: 0.82em;
+  opacity: 0.5;
+  text-align: center;
+}
+
+/* legend */
+#legend {
+  font-size: 0.78em;
+  opacity: 0.65;
+  line-height: 1.7;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  padding-top: 8px;
+}
+</style>
+</head>
+<body>
+
+<!-- ── Board ── -->
+<div id="board-wrapper">
+  <div id="board"></div>
+</div>
+
+<!-- ── Sidebar ── -->
+<div id="sidebar">
+  <h1>SEQUENCE</h1>
+
+  <div id="scores">
+    <div class="seq-badge p1" id="p1-seq">Player 1 — 0 / 2</div>
+    <div class="seq-badge p2" id="p2-seq">Player 2 — 0 / 2</div>
+  </div>
+
+  <div id="deck-info">Cards in deck: <strong id="deck-count">90</strong></div>
+
+  <div id="message">—</div>
+
+  <div id="hand-label">— hand —</div>
+  <div id="hand"></div>
+
+  <div id="buttons">
+    <button id="cancel-btn"  style="display:none">Cancel</button>
+    <button id="discard-btn" style="display:none">Discard Dead Card</button>
+    <button id="undo-btn"    style="display:none">Undo</button>
+    <button id="end-turn-btn">Confirm</button>
+  </div>
+
+  <div id="legend">
+    <strong>Jacks:</strong><br>
+    J♥ J♠ = one-eyed → remove opponent chip<br>
+    J♦ J♣ = two-eyed → place chip anywhere<br>
+    <strong>Win:</strong> first to 2 sequences (5 in a row).<br>
+    FREE corners count as wild for both players.
+  </div>
+
+  <div id="new-game-area">
+    <button id="new-game-btn">New Game</button>
+  </div>
+</div>
+
+<!-- ── Confirm new-game overlay ── -->
+<div class="overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3>Start a new game?</h3>
+    <p>The current game will be lost.</p>
+    <div class="confirm-btns">
+      <button id="confirm-cancel-btn" style="background:#7f8c8d;color:white;">Cancel</button>
+      <button id="confirm-ok-btn"     style="background:#e74c3c;color:white;">New Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Setup overlay ── -->
+<div class="overlay" id="setup-overlay">
+  <h2>SEQUENCE</h2>
+  <p style="margin-top:-10px; font-size:0.95em;">Enter player names to begin</p>
+  <div class="setup-form">
+    <div class="setup-field">
+      <label><span class="player-dot p1"></span>Player 1 (blue chips)</label>
+      <input id="name1-input" type="text" maxlength="20" placeholder="Player 1" autocomplete="off">
+    </div>
+    <div class="setup-field">
+      <label><span class="player-dot p2"></span>Player 2 (red chips)</label>
+      <input id="name2-input" type="text" maxlength="20" placeholder="Player 2" autocomplete="off">
+    </div>
+    <button class="big-btn" id="start-game-btn" style="margin-top:4px;">Start Game ▶</button>
+    <div class="setup-warning" id="setup-warning"></div>
+  </div>
+</div>
+
+<!-- ── Turn overlay ── -->
+<div class="overlay" id="turn-overlay">
+  <h2 id="turn-overlay-title">Player 1's Turn</h2>
+  <p id="turn-overlay-sub">Pass the device to Player 1, then tap the button.</p>
+  <button class="big-btn" id="my-turn-btn">My Turn ▶</button>
+</div>
+
+<!-- ── Game over overlay ── -->
+<div class="overlay" id="gameover-overlay">
+  <h2 id="winner-title">Player 1 Wins!</h2>
+  <p>Congratulations — 2 sequences completed!</p>
+  <button class="big-btn" id="restart-btn">Play Again</button>
+</div>
+
+<script>
+// ─── Board Layout ─────────────────────────────────────────────────────────────
+const BOARD = [
+  ['FREE','2♠','3♠','4♠','5♠','6♠','7♠','8♠','9♠','FREE'],
+  ['6♣','5♥','4♥','3♥','2♥','2♦','3♦','4♦','5♦','10♠'],
+  ['5♣','6♥','K♦','A♦','A♣','K♣','Q♣','10♣','6♦','Q♠'],
+  ['4♣','7♥','Q♦','Q♥','10♥','9♥','8♥','9♣','7♦','K♠'],
+  ['3♣','8♥','K♥','A♥','2♣','7♣','8♣','8♦','10♦','A♠'],
+  ['2♣','9♥','10♦','K♦','3♥','4♥','5♥','9♣','9♦','2♠'],
+  ['A♣','10♥','Q♦','A♦','6♥','7♥','2♥','8♦','Q♠','3♠'],
+  ['K♣','Q♥','10♠','9♠','8♠','7♠','6♠','5♠','4♠','K♠'],
+  ['Q♣','K♥','A♥','A♠','2♦','3♦','4♦','5♦','6♦','7♦'],
+  ['FREE','9♦','3♣','4♣','5♣','6♣','7♣','8♣','10♣','FREE'],
+];
+
+// ─── Card helpers ─────────────────────────────────────────────────────────────
+const ONE_EYE = new Set(['J♥','J♠']);
+const TWO_EYE = new Set(['J♦','J♣']);
+const isOneEye = c => ONE_EYE.has(c);
+const isTwoEye = c => TWO_EYE.has(c);
+const isJack   = c => ONE_EYE.has(c) || TWO_EYE.has(c);
+const rank     = c => c.slice(0, -1);
+const suitChar = c => c.slice(-1);
+const isRed    = c => c.endsWith('♥') || c.endsWith('♦');
+
+function buildDeck() {
+  const suits = ['♠','♥','♦','♣'], ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const d = [];
+  for (let i = 0; i < 2; i++) for (const s of suits) for (const r of ranks) d.push(r+s);
+  return d;
+}
+function shuffle(a) {
+  for (let i = a.length-1; i > 0; i--) { const j = Math.random()*i+1|0; [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+// ─── State & persistence ──────────────────────────────────────────────────────
+const SAVE_KEY = 'sequence_save';
+let S;
+
+function saveGame() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(_) {}
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) { S = JSON.parse(raw); return true; }
+  } catch(_) {}
+  return false;
+}
+
+function pname(i) { return (S && S.names && S.names[i]) || `Player ${i+1}`; }
+
+function showSetupOverlay(warning) {
+  // Pre-fill with existing names if resuming
+  document.getElementById('name1-input').value = (S && S.names) ? S.names[0] : '';
+  document.getElementById('name2-input').value = (S && S.names) ? S.names[1] : '';
+  document.getElementById('setup-warning').textContent = warning || '';
+  document.getElementById('setup-overlay').style.display = 'flex';
+}
+
+function hideSetupOverlay() {
+  document.getElementById('setup-overlay').style.display = 'none';
+}
+
+function newGame() {
+  if (S && !S.over) {
+    document.getElementById('confirm-overlay').style.display = 'flex';
+  } else {
+    localStorage.removeItem(SAVE_KEY);
+    showSetupOverlay();
+  }
+}
+
+function startFreshGame(name1, name2) {
+  const deck = shuffle(buildDeck());
+  S = {
+    board:       Array.from({length:10}, ()=>Array(10).fill(null)),
+    locked:      Array.from({length:10}, ()=>Array(10).fill(false)),
+    hands:       [deck.splice(0,7), deck.splice(0,7)],
+    deck,
+    cur:         0,
+    seqs:        [0, 0],
+    selCard:     null,
+    mode:        'idle',
+    actionTaken: false,
+    over:        false,
+    names:       [name1 || 'Player 1', name2 || 'Player 2'],
+    snapshot:    null,
+  };
+  saveGame();
+  showTurnOverlay();
+  render();
+}
+
+function initGame() {
+  if (loadGame()) {
+    if (!S.names) S.names = ['Player 1', 'Player 2']; // migrate old saves
+    if (S.over) {
+      render();
+      showGameOver();
+    } else {
+      showTurnOverlay();
+      render();
+    }
+  } else {
+    showSetupOverlay();
+  }
+}
+
+// ─── Board helpers ────────────────────────────────────────────────────────────
+function positionsFor(card) {
+  const out = [];
+  for (let r=0;r<10;r++) for (let c=0;c<10;c++) if (BOARD[r][c]===card) out.push([r,c]);
+  return out;
+}
+
+function validPositions(card) {
+  const me = S.cur===0?'p1':'p2', opp = me==='p1'?'p2':'p1';
+  if (isTwoEye(card)) {
+    const out=[];
+    for (let r=0;r<10;r++) for (let c=0;c<10;c++)
+      if (BOARD[r][c]!=='FREE' && S.board[r][c]===null) out.push([r,c]);
+    return out;
+  }
+  if (isOneEye(card)) {
+    const out=[];
+    for (let r=0;r<10;r++) for (let c=0;c<10;c++)
+      if (S.board[r][c]===opp && !S.locked[r][c]) out.push([r,c]);
+    return out;
+  }
+  return positionsFor(card).filter(([r,c])=>S.board[r][c]===null);
+}
+
+function isDead(card) {
+  if (isJack(card)) return validPositions(card).length===0;
+  return positionsFor(card).every(([r,c])=>S.board[r][c]!==null);
+}
+
+// ─── Sequence detection ───────────────────────────────────────────────────────
+function checkSequences() {
+  const DIRS=[[0,1],[1,0],[1,1],[1,-1]];
+  const newLock=Array.from({length:10},()=>Array(10).fill(false));
+  const counts=[0,0];
+  for (const [pi,player] of [['p1',0],['p2',1]].map(([p,i])=>[i,p])) {
+    for (const [dr,dc] of DIRS) {
+      for (let r=0;r<10;r++) for (let c=0;c<10;c++) {
+        const cells=[];
+        let ok=true;
+        for (let k=0;k<5;k++) {
+          const nr=r+dr*k, nc=c+dc*k;
+          if (nr<0||nr>=10||nc<0||nc>=10){ok=false;break;}
+          if (S.board[nr][nc]!==player && BOARD[nr][nc]!=='FREE'){ok=false;break;}
+          cells.push([nr,nc]);
+        }
+        if (ok && cells.length===5 && !cells.every(([r2,c2])=>S.locked[r2][c2])) {
+          counts[pi]++;
+          cells.forEach(([r2,c2])=>newLock[r2][c2]=true);
+        }
+      }
+    }
+  }
+  for (let r=0;r<10;r++) for (let c=0;c<10;c++) if (newLock[r][c]) S.locked[r][c]=true;
+  S.seqs=counts;
+}
+
+// ─── Snapshot / Undo ──────────────────────────────────────────────────────────
+function takeSnapshot() {
+  S.snapshot = {
+    board: S.board.map(r => [...r]),
+    locked: S.locked.map(r => [...r]),
+    seqs: [...S.seqs],
+    hand: [...S.hands[S.cur]],
+    deck: [...S.deck],
+  };
+}
+
+function undoAction() {
+  if (!S.snapshot) return;
+  const snap = S.snapshot;
+  S.board   = snap.board;
+  S.locked  = snap.locked;
+  S.seqs    = snap.seqs;
+  S.hands[S.cur] = snap.hand;
+  S.deck    = snap.deck;
+  S.snapshot    = null;
+  S.actionTaken = false;
+  S.selCard     = null;
+  S.mode        = 'idle';
+  S.over        = false;
+  saveGame();
+  msg(turnMsg());
+  render();
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+function selectCard(idx) {
+  if (S.over || S.actionTaken) return;
+  const card = S.hands[S.cur][idx];
+  S.selCard = idx;
+
+  if (isOneEye(card)) {
+    S.mode = 'remove';
+    msg('One-eyed Jack — click an opponent chip to remove it.');
+  } else if (isTwoEye(card)) {
+    S.mode = 'place';
+    msg('Two-eyed Jack (wild) — click any empty space.');
+  } else {
+    S.mode = 'place';
+    const v = validPositions(card);
+    if (v.length===0 && isDead(card))
+      msg(`Dead card (${card}) — both spots taken. Discard it.`);
+    else
+      msg(`${card} selected — click a highlighted space.`);
+  }
+  render();
+}
+
+function cellClicked(r, c) {
+  if (S.over || S.selCard===null) return;
+  const me   = S.cur===0?'p1':'p2';
+  const card = S.hands[S.cur][S.selCard];
+  const ok   = validPositions(card).some(([vr,vc])=>vr===r&&vc===c);
+  if (!ok) { msg('That space is not valid for the selected card.'); return; }
+
+  takeSnapshot();
+
+  if (S.mode==='remove') {
+    S.board[r][c] = null;
+    msg('Chip removed. Press Confirm.');
+  } else {
+    S.board[r][c] = me;
+    checkSequences();
+    if (S.seqs[S.cur]>=2) { S.over=true; }
+    else msg('Chip placed. Press Confirm.');
+  }
+
+  // Consume card & draw
+  S.hands[S.cur].splice(S.selCard,1);
+  if (S.deck.length>0) S.hands[S.cur].push(S.deck.pop());
+  S.selCard = null;
+  S.mode = 'idle';
+  S.actionTaken = true;
+
+  saveGame();
+  render();
+  if (S.over) showGameOver();
+}
+
+function discardDead() {
+  if (S.selCard===null) return;
+  const card = S.hands[S.cur][S.selCard];
+  if (!isDead(card)) return;
+  takeSnapshot();
+  S.hands[S.cur].splice(S.selCard,1);
+  if (S.deck.length>0) S.hands[S.cur].push(S.deck.pop());
+  S.selCard = null;
+  S.mode = 'idle';
+  S.actionTaken = true;
+  saveGame();
+  msg('Dead card discarded and replaced. Press Confirm.');
+  render();
+}
+
+function cancelSel() {
+  if (S.actionTaken) return;
+  S.selCard = null;
+  S.mode = 'idle';
+  msg(turnMsg());
+  render();
+}
+
+function endTurn() {
+  if (S.over) return;
+  S.selCard     = null;
+  S.mode        = 'idle';
+  S.actionTaken = false;
+  S.snapshot    = null;
+  S.cur = S.cur===0 ? 1 : 0;
+  saveGame();
+  showTurnOverlay();
+  render();
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+const turnMsg = () => `${pname(S.cur)}'s turn — select a card.`;
+const msg = t => document.getElementById('message').textContent = t;
+
+function showTurnOverlay() {
+  const p = pname(S.cur);
+  document.getElementById('turn-overlay-title').textContent = `${p}'s Turn`;
+  document.getElementById('turn-overlay-sub').textContent =
+    `Pass the device to ${p}, then tap the button below.`;
+  document.getElementById('turn-overlay').style.display = 'flex';
+}
+
+function showGameOver() {
+  document.getElementById('winner-title').textContent = `${pname(S.cur)} Wins!`;
+  document.getElementById('gameover-overlay').style.display = 'flex';
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  renderBoard();
+  renderHand();
+  renderButtons();
+  document.getElementById('p1-seq').textContent = `${pname(0)} — ${S.seqs[0]} / 2`;
+  document.getElementById('p2-seq').textContent = `${pname(1)} — ${S.seqs[1]} / 2`;
+  document.getElementById('deck-count').textContent = S.deck.length;
+}
+
+function renderBoard() {
+  const el = document.getElementById('board');
+  let validSet = new Set(), removeSet = new Set();
+  if (S.selCard!==null) {
+    const card = S.hands[S.cur][S.selCard];
+    for (const [r,c] of validPositions(card)) {
+      (S.mode==='remove' ? removeSet : validSet).add(`${r},${c}`);
+    }
+  }
+  el.innerHTML = '';
+  for (let r=0;r<10;r++) for (let c=0;c<10;c++) {
+    const bc=BOARD[r][c], chip=S.board[r][c], isFree=bc==='FREE', key=`${r},${c}`;
+    const div = document.createElement('div');
+    div.className = 'cell';
+    if (isFree)              div.classList.add('free-cell','no-hover');
+    if (validSet.has(key))   div.classList.add('highlight');
+    if (removeSet.has(key))  div.classList.add('remove-target');
+    if (isFree) {
+      const l=document.createElement('div'); l.className='free-label'; l.textContent='FREE';
+      div.appendChild(l);
+    } else {
+      const rk=document.createElement('div'); rk.className='card-rank'; rk.textContent=rank(bc);
+      const su=document.createElement('div');
+      su.className='card-suit '+(isRed(bc)?'red-suit':'black-suit');
+      su.textContent=suitChar(bc);
+      div.appendChild(rk); div.appendChild(su);
+    }
+    if (chip) {
+      const ch=document.createElement('div');
+      ch.className=`chip ${chip}${S.locked[r][c]?' seq':''}`;
+      div.appendChild(ch);
+    }
+    if (!isFree) div.addEventListener('click',()=>cellClicked(r,c));
+    el.appendChild(div);
+  }
+}
+
+function renderHand() {
+  const el  = document.getElementById('hand');
+  const lbl = document.getElementById('hand-label');
+  lbl.textContent = `— ${pname(S.cur)}'s hand —`;
+  el.innerHTML = '';
+  S.hands[S.cur].forEach((card, idx) => {
+    const div = document.createElement('div');
+    div.className = 'hand-card ' + (isRed(card)?'red-card':'black-card');
+    if (isTwoEye(card))  div.classList.add('jack-wild');
+    if (isOneEye(card))  div.classList.add('jack-remove');
+    if (idx===S.selCard) div.classList.add('selected');
+    if (S.actionTaken)   div.classList.add('action-done');
+    else if (isDead(card) && idx!==S.selCard) div.classList.add('dead');
+
+    const rk=document.createElement('div'); rk.className='c-rank'; rk.textContent=rank(card);
+    const su=document.createElement('div'); su.className='c-suit'; su.textContent=suitChar(card);
+    div.appendChild(rk); div.appendChild(su);
+
+    if (isOneEye(card)) {
+      const l=document.createElement('div'); l.className='jack-label';
+      l.textContent='1-eye\nremove'; div.appendChild(l);
+    } else if (isTwoEye(card)) {
+      const l=document.createElement('div'); l.className='jack-label';
+      l.textContent='2-eye\nwild'; div.appendChild(l);
+    }
+
+    if (!S.actionTaken) div.addEventListener('click',()=>selectCard(idx));
+    el.appendChild(div);
+  });
+}
+
+function renderButtons() {
+  const cancelBtn  = document.getElementById('cancel-btn');
+  const discardBtn = document.getElementById('discard-btn');
+  const undoBtn    = document.getElementById('undo-btn');
+  const endBtn     = document.getElementById('end-turn-btn');
+
+  if (S.actionTaken) {
+    cancelBtn.style.display  = 'none';
+    discardBtn.style.display = 'none';
+    undoBtn.style.display    = 'inline-block';
+    endBtn.disabled = false;
+    if (!S.over) msg('Action done — press Confirm to end your turn.');
+  } else if (S.selCard!==null) {
+    cancelBtn.style.display  = 'inline-block';
+    const card = S.hands[S.cur][S.selCard];
+    discardBtn.style.display = isDead(card) ? 'inline-block' : 'none';
+    undoBtn.style.display    = 'none';
+    endBtn.disabled = true;
+  } else {
+    cancelBtn.style.display  = 'none';
+    discardBtn.style.display = 'none';
+    undoBtn.style.display    = 'none';
+    endBtn.disabled = true;
+  }
+}
+
+// ─── Event listeners ──────────────────────────────────────────────────────────
+document.getElementById('start-game-btn').addEventListener('click', () => {
+  const n1 = document.getElementById('name1-input').value.trim();
+  const n2 = document.getElementById('name2-input').value.trim();
+  hideSetupOverlay();
+  startFreshGame(n1 || 'Player 1', n2 || 'Player 2');
+});
+// Allow Enter key to submit the setup form
+['name1-input','name2-input'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('start-game-btn').click();
+  });
+});
+
+document.getElementById('my-turn-btn').addEventListener('click', () => {
+  document.getElementById('turn-overlay').style.display = 'none';
+  msg(turnMsg());
+  render();
+});
+document.getElementById('end-turn-btn').addEventListener('click', endTurn);
+document.getElementById('cancel-btn').addEventListener('click', cancelSel);
+document.getElementById('discard-btn').addEventListener('click', discardDead);
+document.getElementById('restart-btn').addEventListener('click', () => {
+  document.getElementById('gameover-overlay').style.display = 'none';
+  localStorage.removeItem(SAVE_KEY);
+  showSetupOverlay();
+});
+document.getElementById('undo-btn').addEventListener('click', undoAction);
+document.getElementById('new-game-btn').addEventListener('click', newGame);
+document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').style.display = 'none';
+});
+document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').style.display = 'none';
+  localStorage.removeItem(SAVE_KEY);
+  showSetupOverlay();
+});
+
+initGame();
+</script>
+</body>
+</html>
