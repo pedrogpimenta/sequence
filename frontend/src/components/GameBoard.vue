@@ -2,16 +2,16 @@
   <div id="board-wrapper">
     <div id="board">
       <div
-        v-for="({ bc, chip, locked, isHighlight, isRemove, isFree }, key) in cells"
+        v-for="({ bc, chip, locked, isRemove, isFree, isLastChip }, key) in cells"
         :key="key"
         class="cell"
         :class="{
           'free-cell': isFree,
-          'no-hover': isFree || (!isHighlight && !isRemove),
-          highlight: isHighlight,
+          'no-hover': isFree || !isRemove,
           'remove-target': isRemove,
         }"
         @click="!isFree && emit('cell-click', Math.floor(key / 10), key % 10)"
+        @contextmenu.prevent
       >
         <template v-if="isFree">
           <div class="free-label">FREE</div>
@@ -20,7 +20,7 @@
           <div class="card-rank">{{ rank(bc) }}</div>
           <div class="card-suit" :class="isRed(bc) ? 'red-suit' : 'black-suit'">{{ suitChar(bc) }}</div>
         </template>
-        <div v-if="chip" class="chip" :class="[chip, locked ? 'seq' : '']" />
+        <div v-if="chip" class="chip" :class="[chip, locked ? 'seq' : '', isLastChip ? 'last-chip' : '']" />
       </div>
     </div>
   </div>
@@ -31,10 +31,10 @@ import { computed } from 'vue'
 import { BOARD, rank, suitChar, isRed } from '../game/gameLogic.js'
 
 const props = defineProps({
-  board:      { type: Array, required: true },
-  locked:     { type: Array, required: true },
-  validSet:   { type: Set,   default: () => new Set() },
-  removeSet:  { type: Set,   default: () => new Set() },
+  board:        { type: Array,  required: true },
+  locked:       { type: Array,  required: true },
+  removeSet:    { type: Set,    default: () => new Set() },
+  lastChipKey:  { type: String, default: null },
 })
 const emit = defineEmits(['cell-click'])
 
@@ -44,12 +44,12 @@ const cells = computed(() => {
     for (let c = 0; c < 10; c++) {
       const key = `${r},${c}`
       out.push({
-        bc:          BOARD[r][c],
-        chip:        props.board[r][c],
-        locked:      props.locked[r][c],
-        isHighlight: props.validSet.has(key),
-        isRemove:    props.removeSet.has(key),
-        isFree:      BOARD[r][c] === 'FREE',
+        bc:         BOARD[r][c],
+        chip:       props.board[r][c],
+        locked:     props.locked[r][c],
+        isRemove:   props.removeSet.has(key),
+        isFree:     BOARD[r][c] === 'FREE',
+        isLastChip: props.lastChipKey === key,
       })
     }
   }
@@ -91,16 +91,13 @@ const cells = computed(() => {
   border: 2px solid transparent;
   transition: border-color 0.1s, background 0.1s;
   user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
   overflow: hidden;
 }
 .cell:hover:not(.no-hover) { border-color: #ffd700; }
 .cell.no-hover  { cursor: default; }
 .cell.free-cell { background: #c8e6c9; cursor: default; }
-.cell.highlight {
-  border-color: #f0e000 !important;
-  background: #c8f000;
-  box-shadow: inset 0 0 6px rgba(180,210,0,0.6);
-}
 .cell.remove-target {
   border-color: #ff3300 !important;
   background: #ffaa88;
@@ -123,4 +120,15 @@ const cells = computed(() => {
 .chip.p0 { background: radial-gradient(circle at 35% 35%, #7eb3ff, #1144bb); }
 .chip.p1 { background: radial-gradient(circle at 35% 35%, #ff9999, #bb1111); }
 .chip.seq { border: 2.5px solid gold; box-shadow: 0 0 5px gold; }
+.chip.last-chip {
+  box-shadow: 0 0 0 2.5px white, 0 0 0 4.5px rgba(255,255,255,0.5);
+  animation: last-chip-pulse 1.8s ease-in-out infinite;
+}
+.chip.seq.last-chip {
+  box-shadow: 0 0 5px gold, 0 0 0 2.5px white, 0 0 0 4.5px rgba(255,255,255,0.5);
+}
+@keyframes last-chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(255,255,255,0.4); }
+  50%       { box-shadow: 0 0 0 3px white, 0 0 0 6px rgba(255,255,255,0.7); }
+}
 </style>

@@ -77,8 +77,8 @@
       <GameBoard
         :board="state.board"
         :locked="state.locked"
-        :validSet="highlightSet"
         :removeSet="removeTargetSet"
+        :lastChipKey="lastChipKey"
         @cell-click="onCellClick"
       />
     </div>
@@ -192,14 +192,14 @@ function confirmNewGame() {
   name0.value = state.names[0]; name1.value = state.names[1]; phase.value = 'setup'
 }
 
-const highlightSet = computed(() => {
-  if (state.selCard === null || state.mode === 'remove') return new Set()
-  return new Set(validPositions(state, state.hands[state.cur][state.selCard]).map(([r,c]) => `${r},${c}`))
-})
-
 const removeTargetSet = computed(() => {
   if (state.selCard === null || state.mode !== 'remove') return new Set()
   return new Set(validPositions(state, state.hands[state.cur][state.selCard]).map(([r,c]) => `${r},${c}`))
+})
+
+const lastChipKey = computed(() => {
+  const lc = state.lastChip
+  return lc ? `${lc.r},${lc.c}` : null
 })
 
 const showDiscard = computed(() =>

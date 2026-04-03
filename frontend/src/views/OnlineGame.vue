@@ -110,8 +110,8 @@
       <GameBoard
         :board="gameState.board"
         :locked="gameState.locked"
-        :validSet="highlightSet"
         :removeSet="removeTargetSet"
+        :lastChipKey="lastChipKey"
         @cell-click="onCellClick"
       />
     </div>
@@ -256,7 +256,7 @@ function handleMsg(msg) {
 }
 
 function applyState(msg) {
-  gameState.value = { board: msg.board, locked: msg.locked, seqs: msg.seqs, deckCount: msg.deckCount, myHand: msg.myHand, oppHandCount: msg.oppHandCount, cur: msg.cur, selCard: msg.selCard, mode: msg.mode, actionTaken: msg.actionTaken, over: msg.over, winner: msg.winner, names: msg.names, myIndex: msg.myIndex }
+  gameState.value = { board: msg.board, locked: msg.locked, seqs: msg.seqs, deckCount: msg.deckCount, myHand: msg.myHand, oppHandCount: msg.oppHandCount, cur: msg.cur, selCard: msg.selCard, mode: msg.mode, actionTaken: msg.actionTaken, over: msg.over, winner: msg.winner, names: msg.names, myIndex: msg.myIndex, lastChip: msg.lastChip }
   myIndex.value = msg.myIndex
   updateMessage()
 }
@@ -318,18 +318,16 @@ const localStateForDead = computed(() => {
   return { board: gs.board, locked: gs.locked, cur: myIndex.value, hands: myIndex.value === 0 ? [gs.myHand, []] : [[], gs.myHand] }
 })
 
-const highlightSet = computed(() => {
-  const gs = gameState.value
-  if (!gs || !isMyTurn.value || gs.selCard === null || gs.mode === 'remove') return new Set()
-  const s = { board: gs.board, locked: gs.locked, cur: myIndex.value }
-  return new Set(validPositions(s, gs.myHand[gs.selCard]).map(([r,c]) => `${r},${c}`))
-})
-
 const removeTargetSet = computed(() => {
   const gs = gameState.value
   if (!gs || !isMyTurn.value || gs.selCard === null || gs.mode !== 'remove') return new Set()
   const s = { board: gs.board, locked: gs.locked, cur: myIndex.value }
   return new Set(validPositions(s, gs.myHand[gs.selCard]).map(([r,c]) => `${r},${c}`))
+})
+
+const lastChipKey = computed(() => {
+  const lc = gameState.value?.lastChip
+  return lc ? `${lc.r},${lc.c}` : null
 })
 
 const showDiscard = computed(() => {

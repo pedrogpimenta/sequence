@@ -1,14 +1,14 @@
 export const BOARD = [
-  ['FREE','2♠','3♠','4♠','5♠','6♠','7♠','8♠','9♠','FREE'],
-  ['6♣','5♥','4♥','3♥','2♥','2♦','3♦','4♦','5♦','10♠'],
-  ['5♣','6♥','K♦','A♦','A♣','K♣','Q♣','10♣','6♦','Q♠'],
-  ['4♣','7♥','Q♦','Q♥','10♥','9♥','8♥','9♣','7♦','K♠'],
-  ['3♣','8♥','K♥','A♥','2♣','7♣','8♣','8♦','10♦','A♠'],
-  ['2♣','9♥','10♦','K♦','3♥','4♥','5♥','9♣','9♦','2♠'],
-  ['A♣','10♥','Q♦','A♦','6♥','7♥','2♥','8♦','Q♠','3♠'],
-  ['K♣','Q♥','10♠','9♠','8♠','7♠','6♠','5♠','4♠','K♠'],
-  ['Q♣','K♥','A♥','A♠','2♦','3♦','4♦','5♦','6♦','7♦'],
-  ['FREE','9♦','3♣','4♣','5♣','6♣','7♣','8♣','10♣','FREE'],
+  ['FREE','4♠','3♠','2♠','A♠','A♣','2♣','3♣','4♣','FREE'],
+  ['4♦','K♠','5♠','6♠','7♠','7♣','6♣','5♣','K♣','4♥'],
+  ['3♦','5♦','Q♠','9♠','8♠','8♣','9♣','Q♣','5♥','3♥'],
+  ['2♦','6♦','9♦','Q♦','10♠','10♣','Q♥','9♥','6♥','2♥'],
+  ['A♦','7♦','8♦','10♦','K♦','K♥','10♥','8♥','7♥','A♥'],
+  ['A♥','7♥','8♥','10♥','K♥','K♦','10♦','8♦','7♦','A♦'],
+  ['2♥','6♥','9♥','Q♥','10♣','10♠','Q♦','9♦','6♦','2♦'],
+  ['3♥','5♥','Q♣','9♣','8♣','8♠','9♠','Q♠','5♦','3♦'],
+  ['4♥','K♣','5♣','6♣','7♣','7♠','6♠','5♠','K♠','4♦'],
+  ['FREE','4♣','3♣','2♣','A♣','A♠','2♠','3♠','4♠','FREE'],
 ]
 
 const ONE_EYE = new Set(['J♥', 'J♠'])
@@ -86,6 +86,7 @@ export function buildInitialState(name0, name1) {
     winner: null,
     names: [name0, name1],
     snapshot: null,
+    lastChip: null,
   }
 }
 
@@ -115,7 +116,8 @@ function checkSequences(state) {
   for (let r = 0; r < 10; r++)
     for (let c = 0; c < 10; c++)
       if (newLock[r][c]) state.locked[r][c] = true
-  state.seqs = counts
+  state.seqs[0] += counts[0]
+  state.seqs[1] += counts[1]
 }
 
 function takeSnapshot(state) {
@@ -125,6 +127,7 @@ function takeSnapshot(state) {
     seqs: [...state.seqs],
     hand: [...state.hands[state.cur]],
     deck: [...state.deck],
+    lastChip: state.lastChip,
   }
 }
 
@@ -149,6 +152,7 @@ export function localCellClick(state, r, c) {
     state.board[r][c] = null
   } else {
     state.board[r][c] = `p${state.cur}`
+    state.lastChip = { r, c }
     checkSequences(state)
     if (state.seqs[state.cur] >= 2) {
       state.over = true
@@ -189,6 +193,7 @@ export function localUndo(state) {
   state.seqs = snap.seqs
   state.hands[state.cur] = snap.hand
   state.deck = snap.deck
+  state.lastChip = snap.lastChip
   state.snapshot = null
   state.actionTaken = false
   state.selCard = null
