@@ -75,4 +75,12 @@ const emit = defineEmits(['select'])
   margin-top: 2px;
   white-space: pre;
 }
+
+@media (max-width: 767px) {
+  #hand { gap: 5px; }
+  .hand-card { width: 44px; height: 62px; border-radius: 5px; }
+  .c-rank { font-size: 1em; }
+  .c-suit { font-size: 0.85em; }
+  .jack-label { font-size: 0.42em; }
+}
 </style>

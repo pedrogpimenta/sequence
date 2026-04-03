@@ -19,6 +19,16 @@ services:
     expose:
       - "3000"
     restart: unless-stopped
+    develop:
+      watch:
+        - path: ./frontend/src
+          action: rebuild
+        - path: ./frontend/index.html
+          action: rebuild
+        - path: ./frontend/vite.config.js
+          action: rebuild
+        - path: ./frontend/package.json
+          action: rebuild
 
   server:
     build:
@@ -27,8 +37,19 @@ services:
       - "8080"
     environment:
       PORT: "8080"
+      DB_PATH: "/data/sequence.db"
+    volumes:
+      - server_data:/data
     restart: unless-stopped
+    develop:
+      watch:
+        - path: ./server/src
+          action: sync+restart
+          target: /app/src
+        - path: ./server/package.json
+          action: rebuild
 
 volumes:
   caddy_data:
   caddy_config:
+  server_data:
