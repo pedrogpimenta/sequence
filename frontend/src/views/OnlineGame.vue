@@ -51,11 +51,10 @@
     <button class="ghost-btn" @click="goBack">← Back to Menu</button>
   </div>
 
-  <!-- Connection lost (hard disconnect — server gone) -->
+  <!-- Connection lost (room no longer exists) -->
   <div v-else-if="phase === 'disconnected'" class="overlay">
     <h2>Connection Lost</h2>
     <p>{{ disconnectMsg }}</p>
-    <p style="font-size:0.85em;opacity:0.6">Rejoin with code <strong>{{ roomCode }}</strong> and your name to resume.</p>
     <button class="big-btn" @click="goBack">Back to Menu</button>
   </div>
 
@@ -87,8 +86,14 @@
     </div>
   </div>
 
+  <!-- Auto-reconnect banner (non-blocking) -->
+  <div v-if="autoReconnect" class="reconnect-banner">
+    <span class="reconnect-spinner"></span> Connection lost — reconnecting…
+    <button class="reconnect-leave" @click="goBack">Leave</button>
+  </div>
+
   <!-- Opponent disconnected banner (non-blocking) -->
-  <div v-if="phase === 'play' && oppDisconnected" class="opp-disconnected-banner">
+  <div v-if="phase === 'play' && oppDisconnected && !autoReconnect" class="opp-disconnected-banner">
     ⚠️ Opponent disconnected — waiting for them to rejoin with code <strong>{{ roomCode }}</strong>
   </div>
 
@@ -198,10 +203,12 @@ const myIndex        = ref(null)
 const gameState      = ref(null)
 const message        = ref('')
 const disconnectMsg  = ref('Your opponent disconnected.')
-const menuOpen       = ref(false)
+const menuOpen        = ref(false)
 const oppDisconnected = ref(false)
+const autoReconnect   = ref(false)
 
 let ws = null
+let reconnectTimer = null
 
 const LS_KEY = 'sequence_online_session'
 function saveSession()  { localStorage.setItem(LS_KEY, JSON.stringify({ name: myName.value, code: roomCode.value })) }
@@ -217,13 +224,48 @@ function connect() {
   ws.onmessage = (ev) => { try { handleMsg(JSON.parse(ev.data)) } catch (_) {} }
   ws.onclose   = () => {
     if (phase.value === 'play' && gameState.value && !gameState.value.over) {
-      disconnectMsg.value = 'The connection to the server was lost.'
-      phase.value = 'disconnected'
+      startAutoReconnect()
     }
   }
   ws.onerror = () => {
     if (lobbyStep.value === 'reconnecting') { clearSession(); lobbyStep.value = '' }
     lobbyError.value = 'Cannot connect to server.'
+  }
+}
+
+function startAutoReconnect() {
+  autoReconnect.value = true
+  scheduleReconnect()
+}
+
+function stopAutoReconnect() {
+  autoReconnect.value = false
+  clearTimeout(reconnectTimer)
+  reconnectTimer = null
+}
+
+function scheduleReconnect() {
+  clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(attemptReconnect, 3000)
+}
+
+function attemptReconnect() {
+  if (!autoReconnect.value) return
+  const name = myName.value
+  const code = roomCode.value
+  if (!name || !code) { stopAutoReconnect(); return }
+  if (ws) { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); ws = null }
+  ws = new WebSocket(getWsUrl())
+  ws.onmessage = (ev) => { try { handleMsg(JSON.parse(ev.data)) } catch (_) {} }
+  ws.onopen    = () => send({ type: 'join_room', code, name })
+  ws.onclose   = () => { if (autoReconnect.value) scheduleReconnect() }
+  ws.onerror   = () => { if (autoReconnect.value) scheduleReconnect() }
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible' && autoReconnect.value) {
+    clearTimeout(reconnectTimer)
+    attemptReconnect()
   }
 }
 
@@ -238,6 +280,7 @@ function handleMsg(msg) {
       if (!roomCode.value) roomCode.value = roomCodeInput.value.toUpperCase()
       oppDisconnected.value = false
       phase.value = 'play'
+      stopAutoReconnect()
       saveSession()
     }
     applyState(msg)
@@ -248,7 +291,11 @@ function handleMsg(msg) {
     oppDisconnected.value = false
     updateMessage()
   } else if (msg.type === 'error') {
-    if (lobbyStep.value === 'reconnecting') {
+    if (autoReconnect.value) {
+      stopAutoReconnect()
+      disconnectMsg.value = msg.message
+      phase.value = 'disconnected'
+    } else if (lobbyStep.value === 'reconnecting') {
       clearSession(); lobbyStep.value = ''
     }
     lobbyError.value = msg.message
@@ -300,7 +347,7 @@ function onCellClick(r, c) {
   send({ type: 'place_chip', row: r, col: c })
 }
 
-function goBack() { clearSession(); if (ws) ws.close(); ws = null; router.push('/') }
+function goBack() { stopAutoReconnect(); clearSession(); if (ws) ws.close(); ws = null; router.push('/') }
 
 function cancelReconnect() {
   clearSession()
@@ -337,6 +384,7 @@ const showDiscard = computed(() => {
 })
 
 onMounted(() => {
+  document.addEventListener('visibilitychange', onVisibilityChange)
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
     if (saved?.name && saved?.code) {
@@ -349,7 +397,11 @@ onMounted(() => {
   } catch (_) {}
 })
 
-onUnmounted(() => { if (ws) ws.close() })
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopAutoReconnect()
+  if (ws) ws.close()
+})
 </script>
 
 <style scoped>
@@ -552,6 +604,38 @@ onUnmounted(() => { if (ws) ws.close() })
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Auto-reconnect banner ──────────────────────────────────────────────── */
+.reconnect-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: #c0392b;
+  color: white;
+  font-size: 0.85em;
+  text-align: center;
+  padding: 8px 16px;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.reconnect-spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.reconnect-leave {
+  background: rgba(255,255,255,0.2);
+  color: white; border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 4px; padding: 2px 10px;
+  font-size: 0.9em; cursor: pointer; font-family: inherit;
+}
 
 /* ─── Opponent disconnected banner ───────────────────────────────────────── */
 .opp-disconnected-banner {
