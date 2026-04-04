@@ -1,14 +1,14 @@
 export const BOARD = [
-  ['FREE','2♠','3♠','4♠','5♠','6♠','7♠','8♠','9♠','FREE'],
-  ['6♣','5♥','4♥','3♥','2♥','2♦','3♦','4♦','5♦','10♠'],
-  ['5♣','6♥','K♦','A♦','A♣','K♣','Q♣','10♣','6♦','Q♠'],
-  ['4♣','7♥','Q♦','Q♥','10♥','9♥','8♥','9♣','7♦','K♠'],
-  ['3♣','8♥','K♥','A♥','2♣','7♣','8♣','8♦','10♦','A♠'],
-  ['2♣','9♥','10♦','K♦','3♥','4♥','5♥','9♣','9♦','2♠'],
-  ['A♣','10♥','Q♦','A♦','6♥','7♥','2♥','8♦','Q♠','3♠'],
-  ['K♣','Q♥','10♠','9♠','8♠','7♠','6♠','5♠','4♠','K♠'],
-  ['Q♣','K♥','A♥','A♠','2♦','3♦','4♦','5♦','6♦','7♦'],
-  ['FREE','9♦','3♣','4♣','5♣','6♣','7♣','8♣','10♣','FREE'],
+  ['JOKER', '2♠', '3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', 'JOKER'],
+  ['6♣', '5♣', '4♣', '3♣', '2♣', 'A♥', 'K♥', 'Q♥', '10♥', '10♠'],
+  ['7♣', 'A♠', '2♦', '3♦', '4♦', '5♦', '6♦', '7♦', '9♥', 'Q♠'],
+  ['8♣', 'K♠', '6♣', '5♣', '4♣', '3♣', '2♣', '8♦', '8♥', 'K♠'],
+  ['9♣', 'Q♠', '7♣', '6♥', '5♥', '4♥', 'A♥', '9♦', '7♥', 'A♠'],
+  ['10♣', '10♠', '8♣', '7♥', '2♥', '3♥', 'K♥', '10♦', '6♥', '2♦'],
+  ['Q♣', '9♠', '9♣', '8♥', '9♥', '10♥', 'Q♥', 'Q♦', '5♥', '3♦'],
+  ['K♣', '8♠', '10♣', 'Q♣', 'K♣', 'A♣', 'A♦', 'K♥', '4♥', '4♦'],
+  ['A♣', '7♠', '6♠', '5♠', '4♠', '3♠', '2♠', '2♣', '3♣', '5♦'],
+  ['JOKER', 'A♦', 'K♦', 'Q♦', '10♦', '9♦', '8♦', '7♦', '6♦', 'JOKER'],
 ]
 
 const ONE_EYE = new Set(['J♥', 'J♠'])
@@ -52,7 +52,7 @@ export function validPositions(state, card) {
     const out = []
     for (let r = 0; r < 10; r++)
       for (let c = 0; c < 10; c++)
-        if (BOARD[r][c] !== 'FREE' && state.board[r][c] === null) out.push([r, c])
+        if (BOARD[r][c] !== 'JOKER' && state.board[r][c] === null) out.push([r, c])
     return out
   }
   if (isOneEye(card)) {
@@ -83,7 +83,7 @@ function checkSequences(state) {
         for (let k = 0; k < 5; k++) {
           const nr = r + dr * k, nc = c + dc * k
           if (nr < 0 || nr >= 10 || nc < 0 || nc >= 10) { ok = false; break }
-          if (state.board[nr][nc] !== player && BOARD[nr][nc] !== 'FREE') { ok = false; break }
+          if (state.board[nr][nc] !== player && BOARD[nr][nc] !== 'JOKER') { ok = false; break }
           cells.push([nr, nc])
         }
         if (ok && cells.length === 5 && !cells.every(([r2, c2]) => state.locked[r2][c2])) {
@@ -96,7 +96,8 @@ function checkSequences(state) {
   for (let r = 0; r < 10; r++)
     for (let c = 0; c < 10; c++)
       if (newLock[r][c]) state.locked[r][c] = true
-  state.seqs = counts
+  state.seqs[0] += counts[0]
+  state.seqs[1] += counts[1]
 }
 
 function takeSnapshot(state) {
@@ -106,6 +107,8 @@ function takeSnapshot(state) {
     seqs: [...state.seqs],
     hand: [...state.hands[state.cur]],
     deck: [...state.deck],
+    lastChip: state.lastChip,
+    pendingLastChip: state.pendingLastChip,
   }
 }
 
@@ -125,6 +128,8 @@ export function buildInitialState(name0, name1) {
     winner: null,
     names: [name0, name1],
     snapshot: null,
+    lastChip: null,
+    pendingLastChip: null,
   }
 }
 
@@ -144,6 +149,7 @@ export function getPlayerView(state, playerIndex) {
     winner: state.winner,
     names: state.names,
     myIndex: playerIndex,
+    lastChip: state.lastChip,
   }
 }
 
@@ -185,6 +191,7 @@ function actionPlaceChip(state, playerIndex, r, c) {
     state.board[r][c] = null
   } else {
     state.board[r][c] = `p${playerIndex}`
+    state.pendingLastChip = { r, c }
     checkSequences(state)
     if (state.seqs[playerIndex] >= 2) {
       state.over = true
@@ -229,6 +236,8 @@ function actionUndo(state) {
   state.seqs = snap.seqs
   state.hands[state.cur] = snap.hand
   state.deck = snap.deck
+  state.lastChip = snap.lastChip
+  state.pendingLastChip = snap.pendingLastChip
   state.snapshot = null
   state.actionTaken = false
   state.selCard = null
@@ -240,6 +249,8 @@ function actionUndo(state) {
 
 function actionEndTurn(state) {
   if (!state.actionTaken) return { ok: false, error: 'Must take an action before ending turn' }
+  state.lastChip = state.pendingLastChip
+  state.pendingLastChip = null
   state.selCard = null
   state.mode = 'idle'
   state.actionTaken = false

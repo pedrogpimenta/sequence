@@ -13,6 +13,7 @@
         (!actionTaken && isDead(gameState, card) && idx !== selCard) ? 'dead' : '',
       ]"
       @click="!actionTaken && emit('select', idx)"
+      @contextmenu.prevent
     >
       <div class="c-rank">{{ rank(card) }}</div>
       <div class="c-suit">{{ suitChar(card) }}</div>
@@ -55,6 +56,8 @@ const emit = defineEmits(['select'])
   font-weight: bold;
   transition: transform 0.1s, border-color 0.1s, opacity 0.1s;
   user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 .hand-card:hover:not(.action-done) { transform: translateY(-6px); border-color: #888; }
 .hand-card.selected  { border-color: #ffd700; border-width: 3px; transform: translateY(-10px); }
