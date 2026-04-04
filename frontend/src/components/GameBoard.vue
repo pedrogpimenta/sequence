@@ -14,7 +14,7 @@
         @contextmenu.prevent
       >
         <template v-if="isFree">
-          <div class="free-label">FREE</div>
+          <div class="free-label">JOKER</div>
         </template>
         <template v-else>
           <div class="card-rank">{{ rank(bc) }}</div>
@@ -48,7 +48,7 @@ const cells = computed(() => {
         chip:       props.board[r][c],
         locked:     props.locked[r][c],
         isRemove:   props.removeSet.has(key),
-        isFree:     BOARD[r][c] === 'FREE',
+        isFree:     BOARD[r][c] === 'JOKER',
         isLastChip: props.lastChipKey === key,
       })
     }
