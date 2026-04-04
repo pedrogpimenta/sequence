@@ -347,7 +347,7 @@ function onCellClick(r, c) {
   send({ type: 'place_chip', row: r, col: c })
 }
 
-function goBack() { stopAutoReconnect(); clearSession(); if (ws) ws.close(); ws = null; router.push('/') }
+function goBack() { stopAutoReconnect(); clearSession(); if (ws) ws.close(); ws = null; router.push('/sequence') }
 
 function cancelReconnect() {
   clearSession()

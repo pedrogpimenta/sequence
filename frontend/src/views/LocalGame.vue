@@ -14,7 +14,7 @@
       </div>
       <button class="big-btn" @click="startGame">Start Game ▶</button>
     </div>
-    <button class="ghost-btn" @click="router.push('/')">← Back</button>
+    <button class="ghost-btn" @click="router.push('/sequence')">← Back</button>
   </div>
 
   <!-- Turn overlay -->
@@ -29,7 +29,7 @@
     <h2>{{ state.names[state.winner] }} Wins!</h2>
     <p>Congratulations — 2 sequences completed!</p>
     <button class="big-btn" @click="resetToSetup">Play Again</button>
-    <button class="ghost-btn" @click="router.push('/')">← Main Menu</button>
+    <button class="ghost-btn" @click="router.push('/sequence')">← Main Menu</button>
   </div>
 
   <!-- Confirm new game -->
@@ -57,7 +57,7 @@
       </div>
       <p class="deck-note">Deck: {{ state.deck.length }} cards remaining</p>
       <button class="big-btn sm" @click="requestNewGame(); menuOpen = false">New Game</button>
-      <button class="ghost-btn sm" @click="router.push('/')">← Main Menu</button>
+      <button class="ghost-btn sm" @click="router.push('/sequence')">← Main Menu</button>
     </div>
   </div>
 
@@ -128,7 +128,7 @@
       </div>
       <div class="d-newgame">
         <button class="btn-green w100" @click="requestNewGame">New Game</button>
-        <button class="btn-dark  w100" @click="router.push('/')">← Main Menu</button>
+        <button class="btn-dark  w100" @click="router.push('/sequence')">← Main Menu</button>
       </div>
     </div>
 

@@ -1,8 +1,18 @@
-import { buildInitialState, handleAction, getPlayerView } from './gameLogic.js'
+import { buildInitialState as buildSeqState, handleAction as handleSeqAction, getPlayerView as getSeqView } from './gameLogic.js'
+import { buildInitialState as buildTrucoState, handleAction as handleTrucoAction, getPlayerView as getTrucoView } from './trucoLogic.js'
 import { saveRoom, loadRoom, deleteRoom, codeExists } from './db.js'
 
 // In-memory map: code → { code, players: [ws|null, ws|null], names, state }
 const rooms = new Map()
+
+function gameHandlers(gameType) {
+  if (gameType === 'truco') return { buildState: buildTrucoState, handleAction: handleTrucoAction, getView: getTrucoView }
+  return { buildState: buildSeqState, handleAction: handleSeqAction, getView: getSeqView }
+}
+
+function detectGameType(state) {
+  return state?.gameType === 'truco' ? 'truco' : 'sequence'
+}
 
 function genCode() {
   return Math.random().toString(36).slice(2, 6).toUpperCase()
@@ -13,9 +23,11 @@ function send(ws, obj) {
 }
 
 function broadcastState(room) {
+  const gt  = detectGameType(room.state)
+  const { getView } = gameHandlers(gt)
   for (let i = 0; i < 2; i++) {
     if (room.players[i]) {
-      send(room.players[i], { type: 'state_update', ...getPlayerView(room.state, i) })
+      send(room.players[i], { type: 'state_update', ...getView(room.state, i) })
     }
   }
 }
@@ -27,8 +39,8 @@ function persistRoom(room) {
 // ── Public handlers ──────────────────────────────────────────────────────────
 
 export function handleMessage(ws, msg, ctx) {
-  if (msg.type === 'create_room') return handleCreate(ws, msg.name || 'Player 1')
-  if (msg.type === 'join_room')   return handleJoin(ws, (msg.code || '').toUpperCase(), msg.name || 'Player')
+  if (msg.type === 'create_room') return handleCreate(ws, msg.name || 'Player 1', msg.gameType || 'sequence')
+  if (msg.type === 'join_room')   return handleJoin(ws, (msg.code || '').toUpperCase(), msg.name || 'Player', msg.gameType || 'sequence')
 
   const { roomCode, playerIndex } = ctx
   if (roomCode == null || playerIndex == null) {
@@ -42,12 +54,14 @@ export function handleMessage(ws, msg, ctx) {
     return {}
   }
 
+  const gt = detectGameType(room.state)
+  const { handleAction } = gameHandlers(gt)
+
   const result = handleAction(room.state, playerIndex, msg)
   if (result.ok) {
     persistRoom(room)
     broadcastState(room)
     if (room.state.over) {
-      // Keep in DB for a while so players can see the result, then clean up
       setTimeout(() => { deleteRoom(roomCode); rooms.delete(roomCode) }, 10 * 60 * 1000)
     }
   } else {
@@ -61,25 +75,19 @@ export function handleDisconnect(roomCode, playerIndex) {
   if (!room) return
 
   room.players[playerIndex] = null
-
   const other = room.players[1 - playerIndex]
-  if (other) {
-    send(other, { type: 'opponent_disconnected' })
-  }
+  if (other) send(other, { type: 'opponent_disconnected' })
 
-  // Remove from memory only when both have left; DB record stays for reconnection
-  if (!room.players[0] && !room.players[1]) {
-    rooms.delete(roomCode)
-  }
+  if (!room.players[0] && !room.players[1]) rooms.delete(roomCode)
 }
 
 // ── Room creation ────────────────────────────────────────────────────────────
 
-function handleCreate(ws, name) {
+function handleCreate(ws, name, gameType) {
   let code
   do { code = genCode() } while (rooms.has(code) || codeExists(code))
 
-  const room = { code, players: [ws, null], names: [name, null], state: null }
+  const room = { code, players: [ws, null], names: [name, null], state: null, gameType }
   rooms.set(code, room)
   saveRoom(code, [name, null], null)
 
@@ -89,8 +97,7 @@ function handleCreate(ws, name) {
 
 // ── Join / reconnect ─────────────────────────────────────────────────────────
 
-function handleJoin(ws, code, name) {
-  // Ensure room is in memory (load from DB if needed after server restart / both disconnected)
+function handleJoin(ws, code, name, gameType) {
   let room = rooms.get(code)
   if (!room) {
     const record = loadRoom(code)
@@ -98,7 +105,8 @@ function handleJoin(ws, code, name) {
       send(ws, { type: 'error', message: `Room "${code}" not found` })
       return {}
     }
-    room = { code, players: [null, null], names: record.names, state: record.state }
+    const gt = record.state ? detectGameType(record.state) : gameType
+    room = { code, players: [null, null], names: record.names, state: record.state, gameType: gt }
     rooms.set(code, room)
   }
 
@@ -107,19 +115,18 @@ function handleJoin(ws, code, name) {
   // ── Waiting for P2 (game not started yet) ─────────────────────────────────
   if (!state) {
     if (name === names[0]) {
-      // P1 reconnecting before P2 has joined
       room.players[0] = ws
       send(ws, { type: 'room_created', code, playerIndex: 0 })
       return { roomCode: code, playerIndex: 0 }
     }
     if (!names[1]) {
-      // P2 joining for the first time
       room.players[1] = ws
       room.names[1]   = name
-      room.state       = buildInitialState(names[0], name)
+      const { buildState, getView } = gameHandlers(room.gameType || 'sequence')
+      room.state = buildState(names[0], name)
       persistRoom(room)
-      send(players[0], { type: 'game_start', ...getPlayerView(room.state, 0) })
-      send(ws,         { type: 'game_start', ...getPlayerView(room.state, 1) })
+      send(players[0], { type: 'game_start', ...getView(room.state, 0) })
+      send(ws,         { type: 'game_start', ...getView(room.state, 1) })
       return { roomCode: code, playerIndex: 1 }
     }
     send(ws, { type: 'error', message: 'Room is full' })
@@ -127,15 +134,18 @@ function handleJoin(ws, code, name) {
   }
 
   // ── Game in progress — reconnect by name match ────────────────────────────
+  const gt = detectGameType(state)
+  const { getView } = gameHandlers(gt)
+
   if (name === names[0]) {
     room.players[0] = ws
-    send(ws, { type: 'game_resume', ...getPlayerView(state, 0) })
+    send(ws, { type: 'game_resume', ...getView(state, 0) })
     if (players[1]) send(players[1], { type: 'opponent_reconnected', name: names[0] })
     return { roomCode: code, playerIndex: 0 }
   }
   if (name === names[1]) {
     room.players[1] = ws
-    send(ws, { type: 'game_resume', ...getPlayerView(state, 1) })
+    send(ws, { type: 'game_resume', ...getView(state, 1) })
     if (players[0]) send(players[0], { type: 'opponent_reconnected', name: names[1] })
     return { roomCode: code, playerIndex: 1 }
   }
