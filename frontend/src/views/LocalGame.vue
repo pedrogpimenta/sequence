@@ -209,7 +209,7 @@ const showDiscard = computed(() =>
 function onSelectCard(idx) {
   localSelectCard(state, idx)
   const card = state.hands[state.cur][idx]
-  message.value = isOneEye(card) ? 'One-eyed Jack — click an opponent chip to remove it.' : `${card} selected — click a highlighted space.`
+  message.value = isOneEye(card) ? 'One-eyed Jack — click an opponent chip to remove it.' : `${card} selected — click a valid space.`
   save()
 }
 function onCellClick(r, c) {

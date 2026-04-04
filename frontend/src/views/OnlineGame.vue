@@ -316,7 +316,7 @@ function updateMessage() {
   if (gs.actionTaken)               { message.value = 'Action done — press Confirm to end your turn.'; return }
   if (gs.selCard !== null) {
     const card = gs.myHand[gs.selCard]
-    message.value = isOneEye(card) ? 'One-eyed Jack — click an opponent chip.' : `${card} selected — click a highlighted space.`
+    message.value = isOneEye(card) ? 'One-eyed Jack — click an opponent chip.' : `${card} selected — click a valid space.`
     return
   }
   message.value = 'Your turn — select a card.'
