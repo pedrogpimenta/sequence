@@ -27,7 +27,7 @@ export function trucoRank(c) {
 }
 
 export const SUIT_NAMES   = { E: 'ESP', B: 'BAS', O: 'ORO', C: 'COP' }
-export const SUIT_SYMBOLS = { E: '⚔', B: '⋆', O: '★', C: '◎' }
+export const SUIT_SYMBOLS = { E: '♠️', B: '♣️', O: '♦️', C: '♥️' }
 export const SUIT_COLORS  = {
   E: { bg: 'linear-gradient(145deg,#0c2318,#163d28)', border: '#2d6a47', text: '#7dffa8' },
   B: { bg: 'linear-gradient(145deg,#1e1000,#3d2200)', border: '#6b3f00', text: '#ffcc88' },
