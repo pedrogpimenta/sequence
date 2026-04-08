@@ -2,13 +2,19 @@
   <div class="mode-select">
     <h1>TRUCO</h1>
     <p class="subtitle">Truco Argentino — elegí cómo jugar</p>
+
+    <div class="player-count">
+      <button :class="['count-btn', numPlayers === 2 ? 'active' : '']" @click="numPlayers = 2">2 jugadores</button>
+      <button :class="['count-btn', numPlayers === 4 ? 'active' : '']" @click="numPlayers = 4">4 jugadores</button>
+    </div>
+
     <div class="mode-buttons">
-      <button class="mode-btn local-btn" @click="router.push('/truco/local')">
+      <button class="mode-btn local-btn" @click="router.push(`/truco/local?players=${numPlayers}`)">
         <span class="mode-icon">🖥️</span>
         <span class="mode-title">Local</span>
-        <span class="mode-desc">Dos jugadores,<br>un dispositivo</span>
+        <span class="mode-desc">Un dispositivo,<br>pasalo de mano en mano</span>
       </button>
-      <button class="mode-btn online-btn" @click="router.push('/truco/online')">
+      <button class="mode-btn online-btn" @click="router.push(`/truco/online?players=${numPlayers}`)">
         <span class="mode-icon">🌐</span>
         <span class="mode-title">Online</span>
         <span class="mode-desc">Jugá por la red</span>
@@ -24,8 +30,10 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 const router = useRouter()
+const numPlayers = ref(2)
 </script>
 
 <style scoped>
@@ -35,7 +43,7 @@ const router = useRouter()
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 24px;
 }
 
 h1 {
@@ -49,6 +57,33 @@ h1 {
   font-size: 1.05em;
   opacity: 0.7;
   margin-top: -18px;
+}
+
+.player-count {
+  display: flex;
+  gap: 10px;
+}
+
+.count-btn {
+  padding: 8px 22px;
+  border-radius: 20px;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.6);
+  font-family: inherit;
+  font-size: 0.9em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.count-btn.active {
+  background: #c23000;
+  border-color: #ff6b35;
+  color: white;
+}
+.count-btn:hover:not(.active) {
+  border-color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.9);
 }
 
 .mode-buttons {

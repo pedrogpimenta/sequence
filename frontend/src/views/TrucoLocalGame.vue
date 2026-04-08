@@ -6,12 +6,22 @@
     <div class="setup-form">
       <div class="setup-field">
         <label>Jugador 1</label>
-        <input v-model="name0" type="text" maxlength="20" placeholder="Jugador 1" @keydown.enter="startGame" />
+        <input v-model="names[0]" type="text" maxlength="20" placeholder="Jugador 1" @keydown.enter="startGame" />
       </div>
       <div class="setup-field">
         <label>Jugador 2</label>
-        <input v-model="name1" type="text" maxlength="20" placeholder="Jugador 2" @keydown.enter="startGame" />
+        <input v-model="names[1]" type="text" maxlength="20" placeholder="Jugador 2" @keydown.enter="startGame" />
       </div>
+      <template v-if="numPlayers === 4">
+        <div class="setup-field">
+          <label>Jugador 3 <span class="team-tag">(equipo de J1)</span></label>
+          <input v-model="names[2]" type="text" maxlength="20" placeholder="Jugador 3" @keydown.enter="startGame" />
+        </div>
+        <div class="setup-field">
+          <label>Jugador 4 <span class="team-tag">(equipo de J2)</span></label>
+          <input v-model="names[3]" type="text" maxlength="20" placeholder="Jugador 4" @keydown.enter="startGame" />
+        </div>
+      </template>
       <button class="big-btn" @click="startGame">Empezar ▶</button>
     </div>
     <button class="ghost-btn" @click="router.push('/truco')">← Volver</button>
@@ -44,14 +54,14 @@
           <span>Envido</span>
           <span>+{{ gs.handResult.envido.points }} pts → {{ gs.handResult.envido.winnerName }}</span>
         </div>
-        <div class="result-row" v-if="gs.handResult.envido?.scores">
+        <div class="result-row" v-if="gs.handResult.envido?.scores && gs.numPlayers === 2">
           <span>Puntos envido</span>
           <span>{{ gs.names[0] }}: {{ gs.handResult.envido.scores[0] }} — {{ gs.names[1] }}: {{ gs.handResult.envido.scores[1] }}</span>
         </div>
       </div>
       <div class="score-display">
-        <div class="score-pill p0">{{ gs.names[0] }}: {{ gs.scores[0] }}/30</div>
-        <div class="score-pill p1">{{ gs.names[1] }}: {{ gs.scores[1] }}/30</div>
+        <div class="score-pill p0">{{ teamLabel0 }}: {{ gs.scores[0] }}/30</div>
+        <div class="score-pill p1">{{ teamLabel1 }}: {{ gs.scores[1] }}/30</div>
       </div>
     </div>
     <button class="big-btn" @click="nextHand">Siguiente mano ▶</button>
@@ -60,11 +70,11 @@
 
   <!-- ── Game over overlay ──────────────────────────────────────────────────── -->
   <div v-else-if="phase === 'play' && gs.phase === 'game_over'" class="overlay">
-    <h2>¡{{ gs.names[gs.winner] }} ganó!</h2>
+    <h2>¡{{ gs.handResult?.winnerName ?? teamLabel(gs.winner) }} ganó!</h2>
     <p>Llegó a {{ gs.scores[gs.winner] }}/30 puntos — ¡Felicitaciones!</p>
     <div class="score-display">
-      <div class="score-pill p0">{{ gs.names[0] }}: {{ gs.scores[0] }}</div>
-      <div class="score-pill p1">{{ gs.names[1] }}: {{ gs.scores[1] }}</div>
+      <div class="score-pill p0">{{ teamLabel0 }}: {{ gs.scores[0] }}</div>
+      <div class="score-pill p1">{{ teamLabel1 }}: {{ gs.scores[1] }}</div>
     </div>
     <button class="big-btn" @click="resetToSetup">Nueva partida</button>
     <button class="ghost-btn" @click="router.push('/truco')">← Menú</button>
@@ -77,13 +87,13 @@
     <div class="topbar">
       <div class="tb-score">
         <span class="pts">{{ gs.scores[0] }}</span>
-        {{ gs.names[0] }}
-        <span v-if="gs.mano === 0" class="mano-tag">Mano</span>
+        {{ teamLabel0 }}
+        <span v-if="gs.mano === 0 || (gs.numPlayers === 4 && gs.mano === 2)" class="mano-tag">Mano</span>
       </div>
       <div class="tb-turn">{{ turnLabel }}</div>
       <div class="tb-score right">
-        <span v-if="gs.mano === 1" class="mano-tag">Mano</span>
-        {{ gs.names[1] }}
+        <span v-if="gs.mano === 1 || (gs.numPlayers === 4 && gs.mano === 3)" class="mano-tag">Mano</span>
+        {{ teamLabel1 }}
         <span class="pts">{{ gs.scores[1] }}</span>
       </div>
     </div>
@@ -94,7 +104,7 @@
       <div class="trick-history">
         <div v-for="(result, i) in gs.tricks" :key="i" class="trick-badge"
              :class="result === 'tie' ? 'tie' : result === 0 ? 'p0' : 'p1'">
-          Truco {{ i+1 }}: {{ result === 'tie' ? 'Parda' : gs.names[result] }}
+          Truco {{ i+1 }}: {{ result === 'tie' ? 'Parda' : (i === 0 ? gs.handResult?.winnerName ?? '' : trickTeamName(result)) }}
         </div>
         <div v-for="i in (3 - gs.tricks.length)" :key="'e'+i" class="trick-badge empty">
           Truco {{ gs.tricks.length + i }}
@@ -115,13 +125,14 @@
         (no quiero: {{ gs.truco.noQValue }} pt)
       </div>
       <div v-else-if="gs.envido.done && gs.envido.winner !== null" class="bet-banner result-banner">
-        Envido: <strong>{{ gs.names[gs.envido.winner] }}</strong> ganó {{ gs.envido.points }} pts
-        <template v-if="gs.envido.scores"> ({{ gs.envido.scores[0] }} vs {{ gs.envido.scores[1] }})</template>
+        Envido: <strong>{{ gs.names[gs.envido.winner] ?? teamLabel(gs.envido.winner) }}</strong> ganó {{ gs.envido.points }} pts
+        <template v-if="gs.envido.scores && gs.numPlayers === 2"> ({{ gs.envido.scores[0] }} vs {{ gs.envido.scores[1] }})</template>
       </div>
 
       <!-- Table: cards played this trick -->
       <div class="table">
-        <div class="table-row" v-for="pi in [0, 1]" :key="pi">
+        <div class="table-row" v-for="pi in playerIndices" :key="pi"
+             :class="gs.numPlayers === 4 ? (pi % 2 === 0 ? 'team0-row' : 'team1-row') : ''">
           <div class="table-name" :class="{ 'active-p': gs.cur === pi }">
             {{ gs.names[pi] }}
             <span v-if="gs.mano === pi" class="mano-dot">●</span>
@@ -136,11 +147,12 @@
       <!-- Last trick -->
       <div v-if="gs.lastTrickCards && gs.tricks.length > 0" class="last-trick">
         <span class="lt-label">Último:</span>
-        <TrucoCard :card="gs.lastTrickCards[0]" :small="true" />
-        <span class="vs">vs</span>
-        <TrucoCard :card="gs.lastTrickCards[1]" :small="true" />
+        <template v-for="(card, i) in gs.lastTrickCards.filter(c => c)" :key="i">
+          <TrucoCard :card="card" :small="true" />
+          <span v-if="i < gs.lastTrickCards.filter(c=>c).length - 1" class="vs">vs</span>
+        </template>
         <span class="lt-res" :class="lastTrickResult === 'tie' ? 'tie' : 'win'">
-          {{ lastTrickResult === 'tie' ? 'Parda' : '→ ' + gs.names[lastTrickResult] }}
+          {{ lastTrickResult === 'tie' ? 'Parda' : '→ ' + trickTeamName(lastTrickResult) }}
         </span>
       </div>
     </div>
@@ -203,22 +215,25 @@
 
 <script setup>
 import { ref, computed, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import TrucoCard from '../components/TrucoCard.vue'
 import { buildInitialState, applyAction, ENVIDO_LEVEL_NAMES, TRUCO_LEVEL_NAMES } from '../game/trucoLogic.js'
 
 const router   = useRouter()
+const route    = useRoute()
 const SAVE_KEY = 'truco_save_local'
 
-const phase        = ref('setup')
-const name0        = ref('')
-const name1        = ref('')
-const selectedCard = ref(null)
-
-// Restore saved game
+// Determine player count from query param or saved game
 let saved = null
 try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)) } catch (_) {}
-const gs = reactive(saved ?? buildInitialState('Jugador 1', 'Jugador 2'))
+
+const numPlayers = saved?.numPlayers ?? (parseInt(route.query.players) === 4 ? 4 : 2)
+const names      = ref(Array.from({ length: numPlayers }, (_, i) => ''))
+
+const phase        = ref('setup')
+const selectedCard = ref(null)
+
+const gs = reactive(saved ?? buildInitialState(Array.from({ length: numPlayers }, (_, i) => `Jugador ${i+1}`)))
 if (saved) {
   if (saved.phase === 'game_over') phase.value = 'play'
   else if (saved.phase === 'hand_result') phase.value = 'play'
@@ -230,10 +245,8 @@ function save() {
 }
 
 function startGame() {
-  Object.assign(gs, buildInitialState(
-    name0.value.trim() || 'Jugador 1',
-    name1.value.trim() || 'Jugador 2'
-  ))
+  const resolvedNames = names.value.map((n, i) => n.trim() || `Jugador ${i+1}`)
+  Object.assign(gs, buildInitialState(resolvedNames))
   selectedCard.value = null
   save()
   phase.value = 'pass'
@@ -241,20 +254,27 @@ function startGame() {
 
 function resetToSetup() {
   localStorage.removeItem(SAVE_KEY)
-  name0.value = ''
-  name1.value = ''
+  names.value = names.value.map(() => '')
   phase.value = 'setup'
 }
 
 function nextHand() {
-  applyAction(gs, 0, { type: 'next_hand' })  // either player can trigger next hand
+  applyAction(gs, 0, { type: 'next_hand' })
   selectedCard.value = null
   save()
-  if (gs.phase === 'game_over') return  // stay in 'play' phase to show game_over overlay
+  if (gs.phase === 'game_over') return
   phase.value = 'pass'
 }
 
 // ── Computed ──────────────────────────────────────────────────────────────────
+
+const playerIndices = computed(() => Array.from({ length: gs.names.length }, (_, i) => i))
+
+const teamLabel0 = computed(() => gs.numPlayers === 4 ? `${gs.names[0]} & ${gs.names[2]}` : gs.names[0])
+const teamLabel1 = computed(() => gs.numPlayers === 4 ? `${gs.names[1]} & ${gs.names[3]}` : gs.names[1])
+const teamLabel  = (team) => team === 0 ? teamLabel0.value : teamLabel1.value
+const trickTeamName = (team) => team === 0 ? teamLabel0.value : teamLabel1.value
+
 const showHandResult = computed(() =>
   phase.value === 'play' && gs.phase === 'hand_result'
 )
@@ -266,9 +286,9 @@ const canPlayCard = computed(() =>
 )
 
 const turnLabel = computed(() => {
-  if (gs.envido.pending) return `${gs.names[1 - gs.envido.calledBy]}: responder Envido`
-  if (gs.truco.pending)  return `${gs.names[1 - gs.truco.calledBy]}: responder Truco`
-  return `${gs.names[gs.cur]}`
+  if (gs.envido.pending) return `${gs.names[gs.cur]}: responder Envido`
+  if (gs.truco.pending)  return `${gs.names[gs.cur]}: responder Truco`
+  return gs.names[gs.cur]
 })
 
 const betCallerName = computed(() => {
@@ -297,7 +317,6 @@ function playSelected() {
   const result = applyAction(gs, prevPlayer, { type: 'play_card', cardIndex: idx })
   if (!result.ok) { console.warn(result.error); return }
   save()
-  // If it's now a different player's turn (after trick resolves), pass device
   if (gs.phase === 'playing' && !gs.envido.pending && !gs.truco.pending && gs.cur !== prevPlayer) {
     phase.value = 'pass'
   }
@@ -308,7 +327,6 @@ function doAction(type, extra = {}) {
   const result = applyAction(gs, prevPlayer, { type, ...extra })
   if (!result.ok) { console.warn(result.error); return }
   save()
-  // After responding to a bet, if the turn changes, pass device
   if (gs.phase === 'playing' && !gs.envido.pending && !gs.truco.pending && gs.cur !== prevPlayer) {
     phase.value = 'pass'
   }
@@ -344,6 +362,8 @@ function doAction(type, extra = {}) {
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tb-score.right { justify-content: flex-end; }
 .pts { font-size: 1.15em; color: #ffc850; }
@@ -411,13 +431,15 @@ function doAction(type, extra = {}) {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .table-row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+.team0-row { border-left: 2px solid rgba(30,80,200,0.4); padding-left: 6px; border-radius: 2px; }
+.team1-row { border-left: 2px solid rgba(180,20,20,0.4); padding-left: 6px; border-radius: 2px; }
 .table-name {
   width: 90px;
   font-size: 0.82em;
@@ -464,76 +486,31 @@ function doAction(type, extra = {}) {
   gap: 8px;
 }
 
-.resp-area {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-}
-.resp-label {
-  font-size: 0.78em;
-  opacity: 0.65;
-}
-.resp-btns {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
+.resp-area { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.resp-label { font-size: 0.78em; opacity: 0.65; }
+.resp-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .rb {
-  padding: 8px 16px;
-  border-radius: 7px;
-  border: none;
-  font-family: inherit;
-  font-size: 0.88em;
-  font-weight: bold;
-  cursor: pointer;
-  color: white;
+  padding: 8px 16px; border-radius: 7px; border: none;
+  font-family: inherit; font-size: 0.88em; font-weight: bold;
+  cursor: pointer; color: white;
 }
 .rb.quiero   { background: #27ae60; }
 .rb.noquiero { background: #c0392b; }
 .rb.raise    { background: #6c3483; }
 
-.call-area {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
+.call-area { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .cb {
-  padding: 7px 14px;
-  border-radius: 7px;
-  border: none;
-  font-family: inherit;
-  font-size: 0.85em;
-  font-weight: bold;
-  cursor: pointer;
-  color: white;
+  padding: 7px 14px; border-radius: 7px; border: none;
+  font-family: inherit; font-size: 0.85em; font-weight: bold;
+  cursor: pointer; color: white;
 }
 .cb.ev { background: rgba(0,70,160,0.85); border: 1px solid #004aaa; }
 .cb.tr { background: rgba(150,10,10,0.85); border: 1px solid #9a0000; font-size: 0.95em; }
 
-.hand-area {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.hand-label {
-  font-size: 0.78em;
-  opacity: 0.55;
-  text-align: center;
-}
-.hand-row {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-.play-row {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  align-items: center;
-}
+.hand-area { display: flex; flex-direction: column; gap: 6px; }
+.hand-label { font-size: 0.78em; opacity: 0.55; text-align: center; }
+.hand-row { display: flex; gap: 10px; justify-content: center; }
+.play-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
 
 /* ── Overlays ─────────────────────────────────────────────────────────────── */
 .overlay {
@@ -569,6 +546,7 @@ function doAction(type, extra = {}) {
 }
 .setup-field input:focus       { border-color: rgba(255,255,255,0.55); }
 .setup-field input::placeholder { opacity: 0.35; }
+.team-tag { font-size: 0.8em; opacity: 0.6; font-weight: normal; }
 
 .result-body { display: flex; flex-direction: column; gap: 14px; align-items: center; max-width: 380px; width: 100%; }
 .result-winner { font-size: 1.1em; text-align: center; }

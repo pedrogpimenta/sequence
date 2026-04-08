@@ -1,33 +1,30 @@
-// trucoLogic.js — Argentinian Truco (2 players, 30 points)
+// trucoLogic.js — Argentinian Truco (2 or 4 players, 30 points)
 
-const SUITS  = ['E', 'B', 'O', 'C']  // Espadas, Bastos, Oros, Copas
+const SUITS  = ['E', 'B', 'O', 'C']
 const VALUES = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12]
 
 function suit(c)  { return c[c.length - 1] }
 function num(c)   { return parseInt(c) }
 
-// ── Card rankings (higher = stronger) ────────────────────────────────────────
 function trucoRank(c) {
   const v = num(c), s = suit(c)
-  if (v === 1  && s === 'E') return 14  // Ancho de espadas
-  if (v === 1  && s === 'B') return 13  // Ancho de bastos
-  if (v === 7  && s === 'E') return 12  // Siete de espadas
-  if (v === 7  && s === 'O') return 11  // Siete de oros
+  if (v === 1  && s === 'E') return 14
+  if (v === 1  && s === 'B') return 13
+  if (v === 7  && s === 'E') return 12
+  if (v === 7  && s === 'O') return 11
   if (v === 3)               return 10
   if (v === 2)               return 9
-  if (v === 1)               return 8   // Ancho de copa/oro
+  if (v === 1)               return 8
   if (v === 12)              return 7
   if (v === 11)              return 6
   if (v === 10)              return 5
-  if (v === 7)               return 4   // 7 de basto/copa
+  if (v === 7)               return 4
   if (v === 6)               return 3
   if (v === 5)               return 2
-  return 1                               // 4
+  return 1
 }
 
-function envidoVal(c) {
-  const v = num(c); return v >= 10 ? 0 : v
-}
+function envidoVal(c) { const v = num(c); return v >= 10 ? 0 : v }
 
 function calcEnvido(hand) {
   const bySuit = {}
@@ -65,51 +62,58 @@ function shuffle(a) {
 
 function faltaVal(scores) { return Math.max(1, 30 - Math.min(scores[0], scores[1])) }
 
-// ── Initial sub-states ────────────────────────────────────────────────────────
+// team: 0 = players 0 & 2, team 1 = players 1 & 3
+function teamOf(playerIndex) { return playerIndex % 2 }
+
+function teamName(state, team) {
+  if (state.numPlayers === 2) return state.names[team]
+  return `${state.names[team]} & ${state.names[team + 2]}`
+}
+
+// Best envido score for a team (4P: max of both members; 2P: just that player)
+function envidoTeamScore(state, team) {
+  const s0 = calcEnvido(state.initialHands[team])
+  if (state.numPlayers === 2) return s0
+  return Math.max(s0, calcEnvido(state.initialHands[team + 2]))
+}
+
 function initEnvido() {
-  return {
-    pending: false, calledBy: null, level: 0,
-    value: 0, noQValue: 0,
-    done: false, winner: null, points: 0,
-    showScores: false, scores: null,
-  }
+  return { pending: false, calledBy: null, level: 0, value: 0, noQValue: 0, done: false, winner: null, points: 0, showScores: false, scores: null }
 }
 
 function initTruco() {
-  return {
-    pending: false, calledBy: null, level: 0,
-    value: 1, noQValue: 0,
-    done: false, rejected: false,
-  }
+  return { pending: false, calledBy: null, level: 0, value: 1, noQValue: 0, done: false, rejected: false }
 }
 
-// ── Deal a new hand ───────────────────────────────────────────────────────────
 function dealHand(state) {
-  const deck  = buildDeck()
-  const mano  = state.mano === null ? 0 : 1 - state.mano
-  state.mano         = mano
-  state.initialHands = [deck.slice(0, 3), deck.slice(3, 6)]
-  state.hands        = [deck.slice(0, 3), deck.slice(3, 6)]
-  state.trickCards   = [null, null]
+  const n    = state.numPlayers
+  const deck = buildDeck()
+  const mano = state.mano === null ? 0 : (state.mano + 1) % n
+  state.mano          = mano
+  state.initialHands  = Array.from({ length: n }, (_, i) => deck.slice(i * 3, i * 3 + 3))
+  state.hands         = state.initialHands.map(h => [...h])
+  state.trickCards    = new Array(n).fill(null)
   state.lastTrickCards = null
-  state.trickCur     = mano
-  state.trickLeader  = mano
-  state.currentTrick = 0
-  state.tricks       = []
-  state.envido       = initEnvido()
-  state.truco        = initTruco()
-  state.cur          = mano
-  state.phase        = 'playing'
-  state.handResult   = null
-  state.handNumber   = (state.handNumber || 0) + 1
+  state.trickCur      = mano
+  state.trickLeader   = mano
+  state.currentTrick  = 0
+  state.tricks        = []
+  state.envido        = initEnvido()
+  state.truco         = initTruco()
+  state.cur           = mano
+  state.phase         = 'playing'
+  state.handResult    = null
+  state.handNumber    = (state.handNumber || 0) + 1
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function buildInitialState(name0, name1) {
+// names: array of 2 or 4 player names
+export function buildInitialState(names) {
+  const numPlayers = names.length
   const state = {
-    gameType: 'truco',
-    names: [name0, name1],
+    gameType: 'truco', numPlayers,
+    names: [...names],
     scores: [0, 0],
     over: false, winner: null,
     mano: null, handNumber: 0,
@@ -127,35 +131,36 @@ export function buildInitialState(name0, name1) {
 }
 
 export function getPlayerView(state, playerIndex) {
-  const opp = 1 - playerIndex
+  const handCounts = state.hands.map(h => h.filter(c => c !== null).length)
   return {
-    gameType:      'truco',
-    names:         state.names,
-    scores:        state.scores,
-    myHand:        state.hands[playerIndex],
-    oppHandCount:  state.hands[opp].filter(c => c !== null).length,
-    mano:          state.mano,
-    currentTrick:  state.currentTrick,
-    trickCards:    state.trickCards,
-    lastTrickCards:state.lastTrickCards,
-    trickLeader:   state.trickLeader,
-    trickCur:      state.trickCur,
-    tricks:        state.tricks,
-    envido:        state.envido,
-    truco:         state.truco,
-    cur:           state.cur,
-    phase:         state.phase,
-    handResult:    state.handResult,
-    over:          state.over,
-    winner:        state.winner,
-    myIndex:       playerIndex,
-    handNumber:    state.handNumber,
+    gameType:       'truco',
+    numPlayers:     state.numPlayers,
+    names:          state.names,
+    scores:         state.scores,
+    myHand:         state.hands[playerIndex],
+    handCounts,
+    oppHandCount:   handCounts[1 - playerIndex],  // 2P compat
+    mano:           state.mano,
+    currentTrick:   state.currentTrick,
+    trickCards:     state.trickCards,
+    lastTrickCards: state.lastTrickCards,
+    trickLeader:    state.trickLeader,
+    trickCur:       state.trickCur,
+    tricks:         state.tricks,
+    envido:         state.envido,
+    truco:          state.truco,
+    cur:            state.cur,
+    phase:          state.phase,
+    handResult:     state.handResult,
+    over:           state.over,
+    winner:         state.winner,
+    myIndex:        playerIndex,
+    handNumber:     state.handNumber,
   }
 }
 
 export function handleAction(state, playerIndex, msg) {
   if (state.over && msg.type !== 'next_hand') return { ok: false, error: 'Game is over' }
-  // next_hand can be called by either player
   if (msg.type === 'next_hand') return actNextHand(state)
   if (state.cur !== playerIndex) return { ok: false, error: 'Not your turn' }
 
@@ -193,39 +198,65 @@ function actPlayCard(state, playerIndex, cardIndex) {
   hand[cardIndex] = null
   state.trickCards[playerIndex] = card
 
-  if (state.trickCards[0] !== null && state.trickCards[1] !== null) {
+  if (state.trickCards.every(c => c !== null)) {
     resolveTrick(state)
   } else {
-    state.trickCur = 1 - playerIndex
-    state.cur      = state.trickCur
+    const next = (playerIndex + 1) % state.numPlayers
+    state.trickCur = next
+    state.cur      = next
   }
   return { ok: true }
 }
 
+function bestByTurnOrder(candidates, trickLeader, n) {
+  let best = candidates[0], bestPos = (best - trickLeader + n) % n
+  for (const p of candidates.slice(1)) {
+    const pos = (p - trickLeader + n) % n
+    if (pos < bestPos) { best = p; bestPos = pos }
+  }
+  return best
+}
+
 function resolveTrick(state) {
-  const [c0, c1] = state.trickCards
-  const r0 = trucoRank(c0), r1 = trucoRank(c1)
-  const result = r0 > r1 ? 0 : r1 > r0 ? 1 : 'tie'
+  const n = state.numPlayers
+  const ranks = state.trickCards.map(trucoRank)
+  let result, nextLeaderPlayer
+
+  if (n === 2) {
+    const r0 = ranks[0], r1 = ranks[1]
+    result = r0 > r1 ? 0 : r1 > r0 ? 1 : 'tie'
+    nextLeaderPlayer = result === 'tie' ? state.mano : result
+  } else {
+    const t0best = Math.max(ranks[0], ranks[2])
+    const t1best = Math.max(ranks[1], ranks[3])
+    if (t0best > t1best) {
+      result = 0
+      const cands = [0, 2].filter(i => ranks[i] === t0best)
+      nextLeaderPlayer = bestByTurnOrder(cands, state.trickLeader, n)
+    } else if (t1best > t0best) {
+      result = 1
+      const cands = [1, 3].filter(i => ranks[i] === t1best)
+      nextLeaderPlayer = bestByTurnOrder(cands, state.trickLeader, n)
+    } else {
+      result = 'tie'
+      nextLeaderPlayer = state.mano
+    }
+  }
 
   state.tricks.push(result)
   state.lastTrickCards = [...state.trickCards]
-  state.trickCards = [null, null]
+  state.trickCards = new Array(n).fill(null)
 
-  // Close envido once trick 0 is resolved
   if (state.currentTrick === 0 && !state.envido.done)
     state.envido.done = true
 
   const hw = handWinner(state)
-  if (hw !== null) {
-    endHand(state, hw)
-    return
-  }
+  if (hw !== null) { endHand(state, hw); return }
 
   state.currentTrick++
-  const nextLeader     = result === 'tie' ? state.mano : result
-  state.trickLeader    = nextLeader
-  state.trickCur       = nextLeader
-  state.cur            = nextLeader
+  state.trickLeader = nextLeaderPlayer
+  state.trickCur    = nextLeaderPlayer
+  state.cur         = nextLeaderPlayer
 }
 
 function handWinner(state) {
@@ -235,27 +266,27 @@ function handWinner(state) {
   if (w0 >= 2) return 0
   if (w1 >= 2) return 1
   if (T.length === 2) {
-    if (T[0] === 'tie' && T[1] !== 'tie')  return T[1]
-    if (T[0] !== 'tie' && T[1] === 'tie')  return T[0]
-    return null // two pardas → need trick 3
+    if (T[0] === 'tie' && T[1] !== 'tie') return T[1]
+    if (T[0] !== 'tie' && T[1] === 'tie') return T[0]
+    return null
   }
   if (T.length === 3) {
     if (w0 > w1) return 0
     if (w1 > w0) return 1
     const first = T.find(t => t !== 'tie')
-    return first !== undefined ? first : state.mano
+    return first !== undefined ? first : teamOf(state.mano)
   }
   return null
 }
 
-function endHand(state, winner) {
+function endHand(state, winnerTeam) {
   if (!state.envido.done) state.envido.done = true
   const trucoVal = state.truco.level === 0 ? 1 : state.truco.value
-  if (!state.truco.rejected) givePoints(state, winner, trucoVal)
+  if (!state.truco.rejected) givePoints(state, winnerTeam, trucoVal)
 
   state.handResult = {
-    winner,
-    winnerName:    state.names[winner],
+    winner:        winnerTeam,
+    winnerName:    teamName(state, winnerTeam),
     tricks:        [...state.tricks],
     lastTrickCards:state.lastTrickCards,
     trucoPoints:   state.truco.rejected ? 0 : trucoVal,
@@ -270,20 +301,12 @@ function endHand(state, winner) {
 function envidoResultForHand(state) {
   const ev = state.envido
   if (!ev.done || ev.winner === null) return null
-  return {
-    winner:     ev.winner,
-    winnerName: state.names[ev.winner],
-    points:     ev.points,
-    scores:     ev.scores,
-  }
+  return { winner: ev.winner, winnerName: teamName(state, ev.winner), points: ev.points, scores: ev.scores }
 }
 
-function givePoints(state, playerIndex, points) {
-  state.scores[playerIndex] += points
-  if (state.scores[playerIndex] >= 30) {
-    state.over   = true
-    state.winner = playerIndex
-  }
+function givePoints(state, team, points) {
+  state.scores[team] += points
+  if (state.scores[team] >= 30) { state.over = true; state.winner = team }
 }
 
 // ── Envido ────────────────────────────────────────────────────────────────────
@@ -295,38 +318,30 @@ function actEnvido(state, playerIndex, callType) {
     return { ok: false, error: 'El Envido ya terminó' }
   if (state.currentTrick > 0)
     return { ok: false, error: 'El Envido sólo se canta en el primer truco' }
-  if (state.envido.pending && playerIndex === state.envido.calledBy)
+  if (state.envido.pending && teamOf(playerIndex) === teamOf(state.envido.calledBy))
     return { ok: false, error: 'Esperando respuesta del oponente' }
 
-  const ev     = state.envido
-  const lvl    = ev.level
-  const curVal = ev.value
-
+  const ev = state.envido, lvl = ev.level, curVal = ev.value
   let newLevel, newValue, newNoQ
+
   if (callType === 'envido') {
-    if (lvl === 0) { newLevel = 1; newValue = 2; newNoQ = 1 }
+    if      (lvl === 0) { newLevel = 1; newValue = 2; newNoQ = 1 }
     else if (lvl === 1) { newLevel = 2; newValue = 4; newNoQ = 2 }
     else return { ok: false, error: 'No se puede cantar Envido ahora' }
   } else if (callType === 'real_envido') {
-    if      (lvl === 0) { newLevel = 3; newValue = 3;          newNoQ = 1 }
-    else if (lvl === 1) { newLevel = 3; newValue = 5;          newNoQ = 2 }
-    else if (lvl === 2) { newLevel = 3; newValue = 7;          newNoQ = 4 }
+    if      (lvl === 0) { newLevel = 3; newValue = 3;      newNoQ = 1 }
+    else if (lvl === 1) { newLevel = 3; newValue = 5;      newNoQ = 2 }
+    else if (lvl === 2) { newLevel = 3; newValue = 7;      newNoQ = 4 }
     else return { ok: false, error: 'No se puede cantar Real Envido ahora' }
   } else if (callType === 'falta_envido') {
     if (lvl >= 4) return { ok: false, error: 'Ya se cantó Falta Envido' }
-    newLevel = 4
-    newValue = faltaVal(state.scores)
-    newNoQ   = lvl === 0 ? 1 : curVal
+    newLevel = 4; newValue = faltaVal(state.scores); newNoQ = lvl === 0 ? 1 : curVal
   } else {
     return { ok: false, error: 'Tipo inválido' }
   }
 
-  ev.pending  = true
-  ev.calledBy = playerIndex
-  ev.level    = newLevel
-  ev.value    = newValue
-  ev.noQValue = newNoQ
-  state.cur   = 1 - playerIndex
+  ev.pending = true; ev.calledBy = playerIndex; ev.level = newLevel; ev.value = newValue; ev.noQValue = newNoQ
+  state.cur  = (playerIndex + 1) % state.numPlayers
   return { ok: true }
 }
 
@@ -337,7 +352,7 @@ function actTruco(state, playerIndex, targetLevel) {
     return { ok: false, error: 'Responde el Envido primero' }
   if (state.truco.done)
     return { ok: false, error: 'El Truco ya terminó' }
-  if (state.truco.pending && playerIndex === state.truco.calledBy)
+  if (state.truco.pending && teamOf(playerIndex) === teamOf(state.truco.calledBy))
     return { ok: false, error: 'Esperando respuesta del oponente' }
   if (!state.truco.pending && targetLevel !== 1)
     return { ok: false, error: 'Debe cantar Truco primero' }
@@ -346,41 +361,31 @@ function actTruco(state, playerIndex, targetLevel) {
   if (targetLevel > 3)
     return { ok: false, error: 'Nivel máximo alcanzado' }
 
-  const vals    = [0, 2, 3, 4]
-  const noQVals = [0, 1, 2, 3]
+  const vals = [0, 2, 3, 4], noQVals = [0, 1, 2, 3]
   const tr = state.truco
-  tr.pending  = true
-  tr.calledBy = playerIndex
-  tr.level    = targetLevel
-  tr.value    = vals[targetLevel]
-  tr.noQValue = noQVals[targetLevel]
-  state.cur   = 1 - playerIndex
+  tr.pending = true; tr.calledBy = playerIndex; tr.level = targetLevel; tr.value = vals[targetLevel]; tr.noQValue = noQVals[targetLevel]
+  state.cur  = (playerIndex + 1) % state.numPlayers
   return { ok: true }
 }
 
 // ── Quiero / No Quiero ────────────────────────────────────────────────────────
 
 function actQuiero(state, playerIndex) {
-  // Envido quiero
   if (state.envido.pending) {
     const ev = state.envido
-    ev.pending    = false
-    ev.done       = true
-    const s0 = calcEnvido(state.initialHands[0])
-    const s1 = calcEnvido(state.initialHands[1])
-    ev.scores     = [s0, s1]
+    ev.pending = false; ev.done = true
+    const s0 = envidoTeamScore(state, 0), s1 = envidoTeamScore(state, 1)
+    ev.scores     = state.initialHands.map(h => calcEnvido(h))
     ev.showScores = true
-    const winner  = s0 > s1 ? 0 : s1 > s0 ? 1 : state.mano
-    ev.winner     = winner
-    ev.points     = ev.value
+    const winner  = s0 > s1 ? 0 : s1 > s0 ? 1 : teamOf(state.mano)
+    ev.winner = winner; ev.points = ev.value
     givePoints(state, winner, ev.value)
 
     if (state.over) {
       state.handResult = {
-        winner, winnerName: state.names[winner],
-        tricks: [...state.tricks],
-        trucoPoints: 0, trucoLevel: 0,
-        envido: { winner, winnerName: state.names[winner], points: ev.value, scores: [s0, s1] },
+        winner, winnerName: teamName(state, winner),
+        tricks: [...state.tricks], trucoPoints: 0, trucoLevel: 0,
+        envido: { winner, winnerName: teamName(state, winner), points: ev.value, scores: ev.scores },
         scores: [...state.scores],
       }
       state.phase = 'game_over'
@@ -390,12 +395,9 @@ function actQuiero(state, playerIndex) {
     return { ok: true }
   }
 
-  // Truco quiero
   if (state.truco.pending) {
-    const tr  = state.truco
-    tr.pending = false
-    tr.done    = true  // settled — no more raises after quiero
-    state.cur  = state.trickCur
+    state.truco.pending = false; state.truco.done = true
+    state.cur = state.trickCur
     return { ok: true }
   }
 
@@ -403,21 +405,17 @@ function actQuiero(state, playerIndex) {
 }
 
 function actNoQuiero(state, playerIndex) {
-  // Envido no quiero
   if (state.envido.pending) {
     const ev = state.envido
-    ev.pending = false
-    ev.done    = true
-    ev.winner  = ev.calledBy
-    ev.points  = ev.noQValue
-    givePoints(state, ev.calledBy, ev.noQValue)
+    ev.pending = false; ev.done = true
+    ev.winner  = teamOf(ev.calledBy); ev.points = ev.noQValue
+    givePoints(state, ev.winner, ev.noQValue)
 
     if (state.over) {
       state.handResult = {
-        winner: ev.calledBy, winnerName: state.names[ev.calledBy],
-        tricks: [...state.tricks],
-        trucoPoints: 0, trucoLevel: 0,
-        envido: { winner: ev.calledBy, winnerName: state.names[ev.calledBy], points: ev.noQValue, scores: null },
+        winner: ev.winner, winnerName: teamName(state, ev.winner),
+        tricks: [...state.tricks], trucoPoints: 0, trucoLevel: 0,
+        envido: { winner: ev.winner, winnerName: teamName(state, ev.winner), points: ev.noQValue, scores: null },
         scores: [...state.scores],
       }
       state.phase = 'game_over'
@@ -427,18 +425,16 @@ function actNoQuiero(state, playerIndex) {
     return { ok: true }
   }
 
-  // Truco no quiero → hand ends
   if (state.truco.pending) {
     const tr = state.truco
-    tr.pending  = false
-    tr.done     = true
-    tr.rejected = true
-    givePoints(state, tr.calledBy, tr.noQValue)
+    tr.pending = false; tr.done = true; tr.rejected = true
+    const winnerTeam = teamOf(tr.calledBy)
+    givePoints(state, winnerTeam, tr.noQValue)
 
     if (!state.envido.done) state.envido.done = true
     state.handResult = {
-      winner:        tr.calledBy,
-      winnerName:    state.names[tr.calledBy],
+      winner:        winnerTeam,
+      winnerName:    teamName(state, winnerTeam),
       tricks:        [...state.tricks],
       lastTrickCards:state.lastTrickCards,
       trucoPoints:   tr.noQValue,
@@ -455,8 +451,7 @@ function actNoQuiero(state, playerIndex) {
 }
 
 function actNextHand(state) {
-  if (state.phase !== 'hand_result')
-    return { ok: false, error: 'No es el momento' }
+  if (state.phase !== 'hand_result') return { ok: false, error: 'No es el momento' }
   dealHand(state)
   return { ok: true }
 }

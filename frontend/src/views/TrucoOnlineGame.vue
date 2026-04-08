@@ -34,7 +34,10 @@
 
     <div class="lobby-form" v-else-if="lobbyStep === 'waiting'">
       <div class="room-code-display">{{ roomCode }}</div>
-      <p style="text-align:center">Compartí este código con tu oponente.<br>Esperando que se una…</p>
+      <p style="text-align:center">
+        Compartí este código.<br>
+        Esperando jugadores ({{ joinedCount }}/{{ roomNumPlayers }})…
+      </p>
       <div class="spinner"></div>
     </div>
 
@@ -73,14 +76,14 @@
           <span>Envido</span>
           <span>+{{ gameState.handResult.envido.points }} pts → {{ gameState.handResult.envido.winnerName }}</span>
         </div>
-        <div class="result-row" v-if="gameState.handResult.envido?.scores">
+        <div class="result-row" v-if="gameState.handResult.envido?.scores && !is4P">
           <span>Pts envido</span>
           <span>{{ gameState.names[0] }}: {{ gameState.handResult.envido.scores[0] }} — {{ gameState.names[1] }}: {{ gameState.handResult.envido.scores[1] }}</span>
         </div>
       </div>
       <div class="score-display">
-        <div class="score-pill p0">{{ gameState.names[0] }}: {{ gameState.scores[0] }}/30</div>
-        <div class="score-pill p1">{{ gameState.names[1] }}: {{ gameState.scores[1] }}/30</div>
+        <div class="score-pill p0">{{ teamLabel0 }}: {{ gameState.scores[0] }}/30</div>
+        <div class="score-pill p1">{{ teamLabel1 }}: {{ gameState.scores[1] }}/30</div>
       </div>
     </div>
     <button class="big-btn" @click="send({ type: 'next_hand' })">Siguiente mano ▶</button>
@@ -89,11 +92,11 @@
 
   <!-- Game over overlay -->
   <div v-if="phase === 'play' && gameState?.phase === 'game_over'" class="overlay">
-    <h2>¡{{ gameState.names[gameState.winner] }} ganó!</h2>
+    <h2>¡{{ gameState.winner === 0 ? teamLabel0 : teamLabel1 }} ganó!</h2>
     <p>Llegó a {{ gameState.scores[gameState.winner] }}/30 puntos</p>
     <div class="score-display">
-      <div class="score-pill p0">{{ gameState.names[0] }}: {{ gameState.scores[0] }}</div>
-      <div class="score-pill p1">{{ gameState.names[1] }}: {{ gameState.scores[1] }}</div>
+      <div class="score-pill p0">{{ teamLabel0 }}: {{ gameState.scores[0] }}</div>
+      <div class="score-pill p1">{{ teamLabel1 }}: {{ gameState.scores[1] }}</div>
     </div>
     <button class="big-btn" @click="goBack">Volver al menú</button>
   </div>
@@ -106,7 +109,7 @@
 
   <!-- Opponent disconnected banner -->
   <div v-if="phase === 'play' && oppDisconnected && !autoReconnect" class="opp-banner">
-    ⚠ Oponente desconectado — esperando que vuelva con código <strong>{{ roomCode }}</strong>
+    ⚠ Jugador desconectado — esperando que vuelva con código <strong>{{ roomCode }}</strong>
   </div>
 
   <!-- Game UI -->
@@ -115,29 +118,30 @@
     <!-- Mobile top bar -->
     <div class="topbar">
       <div class="tb-score">
-        <span class="pts">{{ gameState.scores[myIndex] }}</span>
-        {{ gameState.names[myIndex] }}
+        <span class="pts">{{ gameState.scores[myTeam] }}</span>
+        <span v-if="!is4P">{{ gameState.names[myIndex] }} (yo)</span>
+        <span v-else>Mi equipo</span>
         <span v-if="gameState.mano === myIndex" class="mano-tag">Mano</span>
-        (yo)
       </div>
       <div class="tb-turn" :class="isMyTurn ? 'active' : 'wait'">
-        {{ isMyTurn ? '▶ Tu turno' : '⏳ Esperando…' }}
+        {{ isMyTurn ? '▶ Tu turno' : `⏳ ${gameState.names[gameState.cur]}` }}
       </div>
       <div class="tb-score right">
-        <span v-if="gameState.mano === (1-myIndex)" class="mano-tag">Mano</span>
-        {{ gameState.names[1-myIndex] }}
-        <span class="pts">{{ gameState.scores[1-myIndex] }}</span>
+        <span v-if="!is4P && gameState.mano === oppIndex" class="mano-tag">Mano</span>
+        <span v-if="!is4P">{{ gameState.names[oppIndex] }}</span>
+        <span v-else>Oponentes</span>
+        <span class="pts">{{ gameState.scores[oppTeam] }}</span>
       </div>
     </div>
 
     <!-- Board area -->
     <div class="bc">
 
-      <!-- Trick history -->
+      <!-- Trick history (mobile) -->
       <div class="trick-history">
         <div v-for="(result, i) in gameState.tricks" :key="i" class="trick-badge"
-             :class="result === 'tie' ? 'tie' : result === myIndex ? 'mine' : 'theirs'">
-          {{ i+1 }}: {{ result === 'tie' ? 'Parda' : gameState.names[result] }}
+             :class="result === 'tie' ? 'tie' : result === myTeam ? 'mine' : 'theirs'">
+          {{ i+1 }}: {{ result === 'tie' ? 'Parda' : gameState.names[result === 0 ? 0 : 1] }}
         </div>
         <div v-for="i in (3 - gameState.tricks.length)" :key="'e'+i" class="trick-badge empty">
           Truco {{ gameState.tricks.length + i }}
@@ -156,13 +160,13 @@
         — vale {{ gameState.truco.value }} pts (no quiero: {{ gameState.truco.noQValue }})
       </div>
       <div v-else-if="gameState.envido.done && gameState.envido.winner !== null" class="bet-banner result-banner">
-        Envido: <strong>{{ gameState.names[gameState.envido.winner] }}</strong> ganó {{ gameState.envido.points }} pts
-        <template v-if="gameState.envido.scores"> ({{ gameState.envido.scores[0] }} vs {{ gameState.envido.scores[1] }})</template>
+        Envido: <strong>{{ gameState.envido.winner === 0 ? teamLabel0 : teamLabel1 }}</strong> ganó {{ gameState.envido.points }} pts
       </div>
 
       <!-- Table -->
       <div class="table">
-        <div v-for="pi in [myIndex, 1-myIndex]" :key="pi" class="table-row">
+        <div v-for="pi in tableOrder" :key="pi" class="table-row"
+             :class="is4P ? (pi % 2 === myTeam ? 'team-mine' : 'team-opp') : ''">
           <div class="table-name" :class="{ 'active-p': gameState.cur === pi }">
             {{ gameState.names[pi] }}
             <span v-if="pi === myIndex"> (yo)</span>
@@ -176,11 +180,12 @@
       <!-- Last trick -->
       <div v-if="gameState.lastTrickCards && gameState.tricks.length > 0" class="last-trick">
         <span class="lt-label">Último:</span>
-        <TrucoCard :card="gameState.lastTrickCards[0]" :small="true" />
-        <span class="vs">vs</span>
-        <TrucoCard :card="gameState.lastTrickCards[1]" :small="true" />
+        <template v-for="(card, i) in gameState.lastTrickCards.filter(c => c)" :key="i">
+          <TrucoCard :card="card" :small="true" />
+          <span v-if="i < gameState.lastTrickCards.filter(c=>c).length - 1" class="vs">vs</span>
+        </template>
         <span class="lt-res" :class="lastTrickResult === 'tie' ? 'tie' : 'win'">
-          {{ lastTrickResult === 'tie' ? 'Parda' : '→ ' + gameState.names[lastTrickResult] }}
+          {{ lastTrickResult === 'tie' ? 'Parda' : '→ ' + (lastTrickResult === myTeam ? 'Vos' : gameState.names[lastTrickResult === 0 ? 0 : 1]) }}
         </span>
       </div>
 
@@ -197,26 +202,26 @@
 
       <!-- Desktop: scores -->
       <div class="d-scores">
-        <div class="score-pill" :class="myIndex === 0 ? 'p0' : 'p1'">
-          {{ gameState.names[myIndex] }} (yo) — {{ gameState.scores[myIndex] }}/30
-          <span v-if="gameState.mano === myIndex"> ●</span>
+        <div class="score-pill" :class="myTeam === 0 ? 'p0' : 'p1'">
+          {{ teamLabel0 }} {{ myTeam === 0 ? '(yo)' : '' }} — {{ gameState.scores[0] }}/30
+          <span v-if="gameState.mano === 0 || (is4P && gameState.mano === 2)"> ●</span>
         </div>
-        <div class="score-pill" :class="myIndex === 0 ? 'p1' : 'p0'">
-          {{ gameState.names[1-myIndex] }} — {{ gameState.scores[1-myIndex] }}/30
-          <span v-if="gameState.mano !== myIndex"> ●</span>
+        <div class="score-pill" :class="myTeam === 1 ? 'p0' : 'p1'">
+          {{ teamLabel1 }} {{ myTeam === 1 ? '(yo)' : '' }} — {{ gameState.scores[1] }}/30
+          <span v-if="gameState.mano === 1 || (is4P && gameState.mano === 3)"> ●</span>
         </div>
       </div>
 
       <!-- Desktop: turn status -->
       <div class="d-status" :class="isMyTurn ? 'my-turn' : 'their-turn'">
-        {{ isMyTurn ? '🟢 Tu turno' : `⏳ Esperando a ${gameState.names[1-myIndex]}…` }}
+        {{ isMyTurn ? '🟢 Tu turno' : `⏳ Esperando a ${gameState.names[gameState.cur]}…` }}
       </div>
 
       <!-- Desktop: trick history -->
       <div class="d-tricks">
         <div v-for="(result, i) in gameState.tricks" :key="i" class="trick-badge"
-             :class="result === 'tie' ? 'tie' : result === myIndex ? 'mine' : 'theirs'">
-          {{ i+1 }}: {{ result === 'tie' ? 'Parda' : gameState.names[result] }}
+             :class="result === 'tie' ? 'tie' : result === myTeam ? 'mine' : 'theirs'">
+          {{ i+1 }}: {{ result === 'tie' ? 'Parda' : gameState.names[result === 0 ? 0 : 1] }}
         </div>
         <div v-for="i in (3 - gameState.tricks.length)" :key="'e'+i" class="trick-badge empty">
           Truco {{ gameState.tricks.length + i }}
@@ -271,15 +276,22 @@
           <button class="ghost-btn" @click="selectedCard = null">Cancelar</button>
         </div>
         <div v-else-if="!isMyTurn" class="wait-msg">
-          Esperando a {{ gameState.names[1-myIndex] }}…
+          Esperando a {{ gameState.names[gameState.cur] }}…
         </div>
         <div v-else-if="hasBetPending && !iAmResponder" class="wait-msg">
           Esperando respuesta a {{ currentBetName }}…
         </div>
       </div>
 
-      <!-- Desktop: opp hand count -->
-      <div class="d-opp">Cartas del oponente: <strong>{{ gameState.oppHandCount }}</strong></div>
+      <!-- Desktop: opp hand counts -->
+      <div class="d-opp">
+        <span v-if="!is4P">Cartas del oponente: <strong>{{ gameState.oppHandCount }}</strong></span>
+        <span v-else>
+          <span v-for="pi in oppIndices" :key="pi">
+            {{ gameState.names[pi] }}: <strong>{{ gameState.handCounts?.[pi] ?? 0 }}</strong> carta(s) &nbsp;
+          </span>
+        </span>
+      </div>
 
       <!-- Desktop: leave -->
       <div class="d-leave">
@@ -292,24 +304,27 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import TrucoCard from '../components/TrucoCard.vue'
 import { ENVIDO_LEVEL_NAMES, TRUCO_LEVEL_NAMES } from '../game/trucoLogic.js'
 
 const router = useRouter()
+const route  = useRoute()
 
-const phase          = ref('lobby')
-const lobbyStep      = ref('')
-const myName         = ref('')
-const roomCode       = ref('')
-const roomCodeInput  = ref('')
-const lobbyError     = ref('')
-const myIndex        = ref(null)
-const gameState      = ref(null)
+const phase           = ref('lobby')
+const lobbyStep       = ref('')
+const myName          = ref('')
+const roomCode        = ref('')
+const roomCodeInput   = ref('')
+const lobbyError      = ref('')
+const myIndex         = ref(null)
+const gameState       = ref(null)
 const oppDisconnected = ref(false)
 const autoReconnect   = ref(false)
 const disconnectMsg   = ref('Tu oponente se desconectó.')
 const selectedCard    = ref(null)
+const joinedCount     = ref(1)
+const roomNumPlayers  = ref(parseInt(route.query.players) === 4 ? 4 : 2)
 
 let ws = null
 let reconnectTimer = null
@@ -366,8 +381,22 @@ function onVisibilityChange() {
 function handleMsg(msg) {
   lobbyError.value = ''
   if (msg.type === 'room_created') {
-    roomCode.value = msg.code; myIndex.value = msg.playerIndex; lobbyStep.value = 'waiting'
+    roomCode.value = msg.code
+    myIndex.value  = msg.playerIndex
+    roomNumPlayers.value = msg.numPlayers ?? 2
+    joinedCount.value    = msg.joined ?? 1
+    lobbyStep.value = 'waiting'
     saveSession()
+  } else if (msg.type === 'room_waiting') {
+    roomCode.value = msg.code
+    myIndex.value  = msg.playerIndex
+    roomNumPlayers.value = msg.numPlayers ?? 2
+    joinedCount.value    = msg.joined ?? 1
+    lobbyStep.value = 'waiting'
+    saveSession()
+  } else if (msg.type === 'player_joined') {
+    joinedCount.value    = msg.joined
+    roomNumPlayers.value = msg.numPlayers ?? roomNumPlayers.value
   } else if (msg.type === 'game_start' || msg.type === 'game_resume' || msg.type === 'state_update') {
     if (msg.type === 'game_start' || msg.type === 'game_resume') {
       if (!roomCode.value) roomCode.value = roomCodeInput.value.toUpperCase()
@@ -395,14 +424,14 @@ function handleMsg(msg) {
 function applyState(msg) {
   gameState.value = {
     names: msg.names, scores: msg.scores,
-    myHand: msg.myHand, oppHandCount: msg.oppHandCount,
+    myHand: msg.myHand, oppHandCount: msg.oppHandCount, handCounts: msg.handCounts,
     mano: msg.mano, currentTrick: msg.currentTrick,
     trickCards: msg.trickCards, lastTrickCards: msg.lastTrickCards,
     trickLeader: msg.trickLeader, trickCur: msg.trickCur,
     tricks: msg.tricks, envido: msg.envido, truco: msg.truco,
     cur: msg.cur, phase: msg.phase, handResult: msg.handResult,
     over: msg.over, winner: msg.winner, myIndex: msg.myIndex,
-    handNumber: msg.handNumber,
+    handNumber: msg.handNumber, numPlayers: msg.numPlayers ?? 2,
   }
   myIndex.value = msg.myIndex
 }
@@ -413,13 +442,16 @@ function send(obj) {
 
 function createRoom() {
   if (!myName.value.trim()) return
-  connect(); ws.onopen = () => send({ type: 'create_room', name: myName.value.trim(), gameType: 'truco' })
+  const np = roomNumPlayers.value
+  connect()
+  ws.onopen = () => send({ type: 'create_room', name: myName.value.trim(), gameType: 'truco', numPlayers: np })
 }
 
 function joinRoom() {
   const code = roomCodeInput.value.trim().toUpperCase()
   if (code.length < 4) return
-  connect(); ws.onopen = () => send({ type: 'join_room', code, name: myName.value.trim(), gameType: 'truco' })
+  connect()
+  ws.onopen = () => send({ type: 'join_room', code, name: myName.value.trim(), gameType: 'truco' })
 }
 
 function goBack() {
@@ -450,6 +482,37 @@ function playSelected() {
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
+const is4P    = computed(() => (gameState.value?.numPlayers ?? 2) === 4)
+const myTeam  = computed(() => (myIndex.value ?? 0) % 2)
+const oppTeam = computed(() => 1 - myTeam.value)
+const oppIndex = computed(() => is4P.value ? null : 1 - (myIndex.value ?? 0))
+
+const teamLabel0 = computed(() => {
+  if (!gameState.value) return ''
+  return is4P.value ? `${gameState.value.names[0]} & ${gameState.value.names[2]}` : gameState.value.names[0]
+})
+const teamLabel1 = computed(() => {
+  if (!gameState.value) return ''
+  return is4P.value ? `${gameState.value.names[1]} & ${gameState.value.names[3]}` : gameState.value.names[1]
+})
+
+// Player order for table: me first, then others in order
+const tableOrder = computed(() => {
+  if (!gameState.value) return []
+  const n = gameState.value.numPlayers
+  const me = myIndex.value ?? 0
+  const order = []
+  for (let i = 0; i < n; i++) order.push((me + i) % n)
+  return order
+})
+
+// Opponent player indices (not me, not my teammate)
+const oppIndices = computed(() => {
+  if (!gameState.value) return []
+  const n = gameState.value.numPlayers, me = myIndex.value ?? 0
+  return Array.from({ length: n }, (_, i) => i).filter(i => i !== me && i % 2 !== me % 2)
+})
+
 const isMyTurn = computed(() => gameState.value?.cur === myIndex.value)
 
 const hasBetPending = computed(() =>
@@ -458,9 +521,10 @@ const hasBetPending = computed(() =>
 
 const iAmResponder = computed(() => {
   const gs = gameState.value
-  if (!gs) return false
-  if (gs.envido?.pending && gs.envido.calledBy !== myIndex.value) return true
-  if (gs.truco?.pending  && gs.truco.calledBy  !== myIndex.value) return true
+  if (!gs || !isMyTurn.value) return false
+  // I'm a responder if a bet is pending and I'm on the opposing team from the caller
+  if (gs.envido?.pending && gs.envido.calledBy % 2 !== (myIndex.value % 2)) return true
+  if (gs.truco?.pending  && gs.truco.calledBy  % 2 !== (myIndex.value % 2)) return true
   return false
 })
 
@@ -574,7 +638,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* Trick history — mobile only */
 .trick-history {
   display: flex;
   gap: 6px;
@@ -608,9 +671,11 @@ onUnmounted(() => {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .table-row { display: flex; align-items: center; gap: 10px; }
+.team-mine { border-left: 2px solid rgba(30,80,200,0.5); padding-left: 6px; border-radius: 2px; }
+.team-opp  { border-left: 2px solid rgba(180,20,20,0.5); padding-left: 6px; border-radius: 2px; }
 .table-name {
   width: 100px;
   font-size: 0.8em;
@@ -649,7 +714,6 @@ onUnmounted(() => {
   padding: 8px 10px;
 }
 
-/* Desktop-only elements hidden on mobile */
 .d-roomcode, .d-scores, .d-status, .d-tricks, .d-opp, .d-leave { display: none; }
 
 .resp-area { display: flex; flex-direction: column; gap: 5px; align-items: center; }
@@ -682,7 +746,6 @@ onUnmounted(() => {
 /* ── Desktop (≥768px) ─────────────────────────────────────────────────────── */
 @media (min-width: 768px) {
   .gw { flex-direction: row; height: 100vh; }
-
   .topbar { display: none; }
   .trick-history { display: none; }
 
